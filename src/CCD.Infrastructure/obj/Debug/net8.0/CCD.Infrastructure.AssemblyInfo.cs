@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CCD.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b10d359c044bb49dea9bdb1fa0a3312dae46fff5")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8ed3b6a5bd7db9de1eb01d569304e3e776a86054")]
 [assembly: System.Reflection.AssemblyProductAttribute("CCD.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CCD.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
