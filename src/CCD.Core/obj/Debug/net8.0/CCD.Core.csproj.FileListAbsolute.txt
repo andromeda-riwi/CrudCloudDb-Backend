@@ -1,0 +1,12 @@
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\obj\Debug\net8.0\CCD.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\obj\Debug\net8.0\CCD.Core.AssemblyInfoInputs.cache
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\obj\Debug\net8.0\CCD.Core.AssemblyInfo.cs
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\obj\Debug\net8.0\CCD.Core.csproj.CoreCompileInputs.cache
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\obj\Debug\net8.0\CCD.Core.sourcelink.json
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\bin\Debug\net8.0\CCD.Core.deps.json
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\bin\Debug\net8.0\CCD.Core.dll
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\bin\Debug\net8.0\CCD.Core.pdb
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\obj\Debug\net8.0\CCD.Core.dll
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\obj\Debug\net8.0\refint\CCD.Core.dll
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\obj\Debug\net8.0\CCD.Core.pdb
+C:\Users\user\OneDrive\Desktop\CrudCloudDb-Backend\src\CCD.Core\obj\Debug\net8.0\ref\CCD.Core.dll
