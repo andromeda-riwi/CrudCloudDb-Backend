@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CCD.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5a5e3c9270b84f4cd7fd1ae850f52bb190d6c8a6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+661e593248e6c0191804acf4c138d0017b6262c7")]
 [assembly: System.Reflection.AssemblyProductAttribute("CCD.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CCD.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
