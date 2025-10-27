@@ -1,28 +1,14 @@
-# ## Archivos y carpetas generados por el sistema operativo ##
-.DS_Store
-Thumbs.db
-
 # ## Archivos y carpetas generados por IDEs (Rider, Visual Studio) ##
-
-# Archivos de configuración específicos de Rider
-# ¡MUY IMPORTANTE para el trabajo en equipo!
 .idea/
-
-# Archivos de configuración de Visual Studio
 .vs/
 
 # ## Carpetas de compilación de .NET ##
-# Contienen los archivos .dll y .exe. Se generan cada vez que compilas.
-# NUNCA deben estar en el repositorio.
 [Bb]in/
 [Oo]bj/
 
 # ## Archivos de configuración de usuario ##
-# Contienen configuraciones locales que no deben ser compartidas.
 *.suo
 *.user
-*.userosscache
-*.sln.docstates
 
 # ## Archivos de publicación ##
 [Pp]ublish/
@@ -30,15 +16,6 @@ Thumbs.db
 
 # ## Archivos de log y temporales ##
 *.log
-*.tmp
-*.temp
-
-# ## Archivos de caché de herramientas de .NET ##
-.dotnet/
-/paket.lock
-/paket-files/
 
 # ## ¡SECRETS! ##
-# NUNCA subas tus configuraciones de desarrollo locales que puedan contener
-# contraseñas o claves. El archivo principal appsettings.json SÍ se sube.
 appsettings.Development.json
