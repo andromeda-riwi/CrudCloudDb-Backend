@@ -18,7 +18,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // 2. Registro del Repositorio de Autenticación (Inyección de Dependencias)
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 
-// 3. Configuración de los Controladores de la API
+// 3. Registro del Servicio de Aprovisionamiento de Bases de Datos
+builder.Services.AddScoped<IDatabaseProvisioner, DatabaseProvisioner>();
+
+// 4. Configuración de los Controladores de la API
 builder.Services.AddControllers();
 
 // 4. Configuración de Swagger para la documentación de la API
