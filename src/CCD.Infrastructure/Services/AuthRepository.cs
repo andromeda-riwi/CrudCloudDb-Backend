@@ -61,7 +61,7 @@ public class AuthRepository : IAuthRepository
 
     // --- MÉTODOS PRIVADOS DE AYUDA ---
 
-    private async Task<bool> UserExists(string email)
+    public async Task<bool> UserExists(string email)
     {
         return await _context.Users.AnyAsync(u => u.Email.ToLower() == email.ToLower());
     }
