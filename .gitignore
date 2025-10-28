@@ -1,0 +1,21 @@
+# ## Archivos y carpetas generados por IDEs (Rider, Visual Studio) ##
+.idea/
+.vs/
+
+# ## Carpetas de compilación de .NET ##
+[Bb]in/
+[Oo]bj/
+
+# ## Archivos de configuración de usuario ##
+*.suo
+*.user
+
+# ## Archivos de publicación ##
+[Pp]ublish/
+[Rr]elease/
+
+# ## Archivos de log y temporales ##
+*.log
+
+# ## ¡SECRETS! ##
+appsettings.Development.json
