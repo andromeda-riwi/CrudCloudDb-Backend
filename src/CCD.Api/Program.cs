@@ -1,8 +1,7 @@
-// --- Imports necesarios para toda la funcionalidad ---
 using System.Text;
 using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
-using CCD.Infrastructure.Services; // Asumo que aquí tendrás tu AuthRepository
+using CCD.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -11,7 +10,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // --- SECCIÓN DE CONFIGURACIÓN DE SERVICIOS ---
 
-// Define un nombre para la política de CORS para reutilizarla
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
 
 // 1. Configuración de CORS (Cross-Origin Resource Sharing)
@@ -20,24 +18,23 @@ builder.Services.AddCors(options =>
     options.AddPolicy(name: MyAllowSpecificOrigins,
                       policy =>
                       {
-                          // Permite que tu frontend en desarrollo y producción se comuniquen con la API
-                          policy.WithOrigins("http://localhost:8080", // Cambia este puerto si tu Vue usa otro
+                          // PERMITE QUE TU FRONTEND SE COMUNIQUE CON LA API
+                          // Si tu frontend corre en otro puerto local, añádelo aquí
+                          policy.WithOrigins("http://localhost:8080", 
                                              "https://voyager.andrescortes.dev")
-                                .AllowAnyHeader()  // Permite cualquier cabecera (como Authorization para el JWT)
-                                .AllowAnyMethod(); // Permite cualquier método HTTP (GET, POST, DELETE, etc.)
+                                .AllowAnyHeader()
+                                .AllowAnyMethod();
                       });
 });
-
 
 // 2. Configuración de la Base de Datos (Entity Framework Core)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 3. Registro del Repositorio de Autenticación (Inyección de Dependencias)
-// Aquí registrarás todos tus repositorios y servicios a medida que los crees.
+// 3. Registro de Servicios y Repositorios (Inyección de Dependencias)
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
-// Ejemplo: builder.Services.AddScoped<IDatabaseService, DatabaseService>();
-
+builder.Services.AddScoped<IDatabaseProvisioner, DatabaseProvisioner>();
+// A medida que crees más servicios (pagos, correos), los registrarás aquí.
 
 // 4. Configuración de los Controladores de la API
 builder.Services.AddControllers();
@@ -64,26 +61,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-
 // --- Construcción de la Aplicación ---
 var app = builder.Build();
-
 
 // --- SECCIÓN DE CONFIGURACIÓN DEL PIPELINE HTTP ---
 // El orden aquí es muy importante.
 
-// Habilita Swagger solo en el entorno de desarrollo
-if (app.Environment.IsDevelopment())
+// Habilita Swagger y SwaggerUI en TODOS los entornos (Desarrollo y Producción)
+// Esto soluciona el error 404 que estabas viendo.
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    // Esto hace que Swagger esté disponible en la raíz (ej: /) en lugar de /swagger
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CCD API v1");
+    c.RoutePrefix = string.Empty; 
+});
 
-// Redirige HTTP a HTTPS
+
+// Redirige HTTP a HTTPS (Certbot ya configura esto, pero es bueno tenerlo)
 app.UseHttpsRedirection();
 
-// ** APLICA LA POLÍTICA DE CORS AQUÍ **
-// Debe ir antes de Authentication y Authorization
+// Aplica la política de CORS
 app.UseCors(MyAllowSpecificOrigins);
 
 // 1. Autenticación: Verifica quién es el usuario (lee el token JWT)
