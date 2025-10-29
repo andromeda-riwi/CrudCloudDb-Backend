@@ -19,6 +19,7 @@ public class ApplicationDbContext : DbContext
 
     // Tablas que Entity Framework gestionará
     public DbSet<User> Users { get; set; }
+    public DbSet<Plan> Plans { get; set; }
     public DbSet<DatabaseInstance> DatabaseInstances { get; set; }
     
     // --- MÉTODO DE CONFIGURACIÓN DE RESPALDO ---

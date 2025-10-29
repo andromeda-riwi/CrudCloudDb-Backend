@@ -37,6 +37,26 @@ public class AuthRepository : IAuthRepository
         user.PasswordHash = passwordHash;
         user.PasswordSalt = passwordSalt;
 
+        // Asignar el plan gratuito por defecto
+        var freePlan = await _context.Plans.FirstOrDefaultAsync(p => p.Name == "Free");
+        if (freePlan == null)
+        {
+            // Si no existe el plan Free, crearlo (usando valores por defecto)
+            freePlan = new Plan
+            {
+                Name = "Free",
+                DatabaseLimitPerEngine = 2,
+                Price = 0,
+                MercadoPagoPriceId = "",
+                MaxDatabases = 2,
+                IsActive = true
+            };
+            await _context.Plans.AddAsync(freePlan);
+            await _context.SaveChangesAsync();
+        }
+        
+        user.PlanId = freePlan.Id;
+
         await _context.Users.AddAsync(user);
         await _context.SaveChangesAsync();
 

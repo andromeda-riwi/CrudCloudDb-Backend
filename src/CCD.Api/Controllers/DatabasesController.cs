@@ -1,6 +1,7 @@
 ﻿// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
+using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,14 +16,13 @@ namespace CCD.Api.Controllers;
 public class DatabasesController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    // Más adelante, aquí inyectarás el servicio de Richi:
-    // private readonly IDatabaseProvisioner _provisioner;
+    private readonly IDatabaseProvisioner _provisioner;
 
-    // Inyectamos el DbContext para interactuar con nuestra base de datos de gestión.
-    public DatabasesController(ApplicationDbContext context /* , IDatabaseProvisioner provisioner */)
+    // Inyectamos el DbContext y el servicio de aprovisionamiento
+    public DatabasesController(ApplicationDbContext context, IDatabaseProvisioner provisioner)
     {
         _context = context;
-        // _provisioner = provisioner;
+        _provisioner = provisioner;
     }
 
     // --- ENDPOINT PARA LISTAR BASES DE DATOS ---
@@ -83,16 +83,15 @@ public class DatabasesController : ControllerBase
         }
         // --- FIN DE LA LÓGICA DE CUOTAS ---
 
-
-        // --- LÓGICA DE APROVISIONAMIENTO (Integración con el trabajo de Richi) ---
-        // TODO: Este bloque se activará cuando integres el servicio de Richi.
-        /*
+        // --- LÓGICA DE APROVISIONAMIENTO ---
+        try
+        {
             // 1. Llamar al servicio de aprovisionamiento
             var connectionDetails = await _provisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
             if (connectionDetails == null)
             {
-                return StatusCode(500, "Hubo un error al crear la base de datos.");
+                return StatusCode(500, new { message = "Hubo un error al crear la base de datos. El servicio devolvió null." });
             }
 
             // 2. Crear la nueva entidad para guardarla en nuestra DB de gestión
@@ -120,10 +119,16 @@ public class DatabasesController : ControllerBase
             };
 
             return CreatedAtAction(nameof(GetDatabasesForUser), new { id = responseDto.Id }, responseDto);
-        */
-        
-        // Respuesta temporal mientras el servicio de Richi no está integrado
-        return Ok(new { message = $"Validación de cuota exitosa. La creación de la base de datos {createDto.Engine} está en proceso..." });
+        }
+        catch (NotImplementedException ex)
+        {
+            return BadRequest(new { message = $"El motor de base de datos '{createDto.Engine}' no es soportado actualmente." });
+        }
+        catch (Exception ex)
+        {
+            // Log del error (en producción usar ILogger)
+            return StatusCode(500, new { message = "Hubo un error al crear la base de datos en el servidor PostgreSQL.", error = ex.Message });
+        }
     }
 
 
