@@ -38,14 +38,11 @@ namespace CCD.Infrastructure.Services
                 return null;
             }
 
-            // --- CORRECCIÓN PARA LA ADVERTENCIA CS8601 ---
             var adminConnectionString = _config.GetConnectionString("AdminPostgresConnection");
             if (string.IsNullOrEmpty(adminConnectionString))
             {
-                // Esta es una falla crítica de configuración. La aplicación no puede continuar.
-                throw new InvalidOperationException("La cadena de conexión 'AdminPostgresConnection' no está configurada en appsettings.json.");
+                throw new InvalidOperationException("La cadena de conexión 'AdminPostgresConnection' no está configurada.");
             }
-            // ---------------------------------------------
 
             var dbName = $"user_{user.Id.ToString().Substring(0, 8)}_{Guid.NewGuid().ToString().Substring(0, 4)}";
             var dbUser = $"user_{Guid.NewGuid().ToString("N").Substring(0, 12)}";
@@ -74,7 +71,7 @@ namespace CCD.Infrastructure.Services
                 Host = connection.Host!,
                 Port = connection.Port,
                 DbUsername = dbUser,
-                Status = "active", // <-- ASIGNAMOS EL ESTADO INICIAL
+                Status = "active",
                 UserId = user.Id
             };
 
@@ -84,10 +81,48 @@ namespace CCD.Infrastructure.Services
             return newDbInstance;
         }
 
-        public Task<bool> DeleteDatabaseAsync(Guid instanceId, User user)
+        public async Task<bool> DeleteDatabaseAsync(Guid instanceId, User user)
         {
-            // TODO: Implementar lógica de borrado.
-            throw new NotImplementedException();
+            var dbInstance = await _context.DatabaseInstances
+                .FirstOrDefaultAsync(db => db.Id == instanceId && db.UserId == user.Id);
+
+            if (dbInstance == null)
+            {
+                return false;
+            }
+
+            if (dbInstance.Engine.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var adminConnectionString = _config.GetConnectionString("AdminPostgresConnection");
+                    if (string.IsNullOrEmpty(adminConnectionString))
+                        throw new InvalidOperationException("La cadena de conexión 'AdminPostgresConnection' no está configurada.");
+
+                    await using var connection = new NpgsqlConnection(adminConnectionString);
+                    await connection.OpenAsync();
+
+                    var terminateConnectionsCommand = $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{dbInstance.Name}';";
+                    var dropDbCommand = $"DROP DATABASE \"{dbInstance.Name}\";";
+                    var dropUserCommand = $"DROP USER \"{dbInstance.DbUsername}\";";
+
+                    await using (var cmd = new NpgsqlCommand(terminateConnectionsCommand, connection)) await cmd.ExecuteNonQueryAsync();
+                    await using (var cmd = new NpgsqlCommand(dropDbCommand, connection)) await cmd.ExecuteNonQueryAsync();
+                    await using (var cmd = new NpgsqlCommand(dropUserCommand, connection)) await cmd.ExecuteNonQueryAsync();
+                    
+                    _context.DatabaseInstances.Remove(dbInstance);
+                    await _context.SaveChangesAsync();
+                    
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error al borrar la base de datos {dbInstance.Name}: {ex.Message}");
+                    return false;
+                }
+            }
+            
+            return false;
         }
 
         public async Task<IEnumerable<DatabaseInstance>> GetUserDatabasesAsync(Guid userId)
@@ -99,7 +134,6 @@ namespace CCD.Infrastructure.Services
 
         private string GenerateSecurePassword()
         {
-            // ... (tu método de generación de contraseñas permanece igual)
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
             var random = new Random();
             var password = new char[16];
@@ -120,5 +154,5 @@ namespace CCD.Infrastructure.Services
             }
             return new string(password);
         }
-    }
-}
+    } // <-- Llave de cierre de la CLASE
+} // <-- Llave de cierre del NAMESPACE
