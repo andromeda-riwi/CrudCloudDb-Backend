@@ -18,34 +18,57 @@ namespace CCD.Api.Controllers
         private readonly IDatabaseProvisioner _provisioner;
         private readonly ApplicationDbContext _context;
 
-        // Inyectamos tanto el provisioner (para la lógica de BD) como el DbContext (para encontrar al usuario)
         public DatabaseController(IDatabaseProvisioner provisioner, ApplicationDbContext context)
         {
             _provisioner = provisioner;
             _context = context;
         }
 
-        // GET: api/databases
+        // Este método ya estaba completo.
         [HttpGet]
         public async Task<IActionResult> GetUserDatabases()
         {
-            // 1. Obtener el ID del usuario desde el token JWT.
             var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userIdString))
             {
-                return Unauthorized(); // Token inválido o no contiene el ID.
+                return Unauthorized();
             }
 
-            // 2. Llamar al método del provisioner para obtener las bases de datos.
             var databases = await _provisioner.GetUserDatabasesAsync(Guid.Parse(userIdString));
-            
-            // 3. Devolver la lista.
             return Ok(databases);
         }
 
-        // POST: api/databases
+        // Este método ya estaba completo.
         [HttpPost]
         public async Task<IActionResult> CreateDatabase([FromBody] CreateDatabaseDto request)
+        {
+            var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdString))
+            {
+                return Unauthorized();
+            }
+
+            var user = await _context.Users.FindAsync(Guid.Parse(userIdString));
+            if (user == null)
+            {
+                return Unauthorized();
+            }
+
+            var createdInstance = await _provisioner.CreateDatabaseAsync(user, request.Engine);
+
+            if (createdInstance == null)
+            {
+                return BadRequest("No se pudo crear la base de datos. Es posible que hayas alcanzado el límite de tu plan.");
+            }
+            
+            return Ok(createdInstance);
+        }
+
+        // ========================================================================
+        // --- ESTE ES EL MÉTODO QUE ESTAMOS IMPLEMENTANDO ---
+        // ========================================================================
+        [HttpDelete("{id}")] // Ruta: DELETE /api/databases/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        public async Task<IActionResult> DeleteDatabase(Guid id)
         {
             // 1. Obtener el ID del usuario desde el token JWT.
             var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -58,32 +81,22 @@ namespace CCD.Api.Controllers
             var user = await _context.Users.FindAsync(Guid.Parse(userIdString));
             if (user == null)
             {
-                // Esto no debería pasar si el token es válido, pero es una buena medida de seguridad.
                 return Unauthorized();
             }
 
-            // 3. Llamar al servicio de aprovisionamiento, pasándole el usuario y el motor solicitado.
-            var createdInstance = await _provisioner.CreateDatabaseAsync(user, request.Engine);
+            // 3. Llamar al servicio de aprovisionamiento para que haga el borrado.
+            var success = await _provisioner.DeleteDatabaseAsync(id, user);
 
-            // 4. Manejar el resultado.
-            if (createdInstance == null)
+            // 4. Devolver un resultado basado en el éxito de la operación.
+            if (success)
             {
-                // Si el provisioner devuelve nulo, es porque el usuario no tiene cuota.
-                return BadRequest("No se pudo crear la base de datos. Es posible que hayas alcanzado el límite de tu plan.");
+                // 204 No Content es una respuesta estándar y correcta para un DELETE exitoso.
+                return NoContent();
             }
-
-            // Devolvemos un 200 OK con los detalles de la instancia creada.
-            return Ok(createdInstance);
-        }
-
-        // DELETE: api/databases/{id}
-        [HttpDelete("{id}")]
-        public  IActionResult DeleteDatabase(Guid id)
-        {
-            // TODO: Implementar la lógica para borrar una BD.
-            // Se necesitará obtener el usuario del token y pasarlo al método DeleteDatabaseAsync
-            // del provisioner para verificar que es el dueño de la BD que intenta borrar.
-            return Ok($"Borrando la base de datos con ID {id} - LÓGICA PENDIENTE");
+            
+            // Si no tuvo éxito, es porque la BD no existe o no pertenece al usuario.
+            // 404 Not Found es un código apropiado en este caso.
+            return NotFound("No se encontró la base de datos o no tienes permiso para borrarla.");
         }
     }
 }
