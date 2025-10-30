@@ -9,5 +9,7 @@ public class Plan
     public string MercadoPagoPriceId { get; set; } = string.Empty; // ID de precio en Mercado Pago
     public int MaxDatabases { get; set; } // Límite total de bases de datos permitidas
     public bool IsActive { get; set; } = true;
+    
+    // Propiedad de navegación: Un plan puede tener muchos usuarios
+    public ICollection<User> Users { get; set; } = new List<User>();
 }
-

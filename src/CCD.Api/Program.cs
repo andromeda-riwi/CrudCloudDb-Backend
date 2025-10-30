@@ -1,4 +1,3 @@
-// --- Imports necesarios para toda la funcionalidad ---
 using System.Text;
 using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
@@ -12,20 +11,36 @@ var builder = WebApplication.CreateBuilder(args);
 
 // --- SECCIÓN DE CONFIGURACIÓN DE SERVICIOS ---
 
-// 1. Configuración de la Base de Datos (Entity Framework Core)
+var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
+
+// 1. Configuración de CORS (Cross-Origin Resource Sharing)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: MyAllowSpecificOrigins,
+                      policy =>
+                      {
+                          // PERMITE QUE TU FRONTEND SE COMUNIQUE CON LA API
+                          // Si tu frontend corre en otro puerto local, añádelo aquí
+                          policy.WithOrigins("http://localhost:8080", 
+                                             "https://voyager.andrescortes.dev")
+                                .AllowAnyHeader()
+                                .AllowAnyMethod();
+                      });
+});
+
+// 2. Configuración de la Base de Datos (Entity Framework Core)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. Registro del Repositorio de Autenticación (Inyección de Dependencias)
+// 3. Registro de Servicios y Repositorios (Inyección de Dependencias)
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
-
-// 3. Registro del Servicio de Aprovisionamiento de Bases de Datos
 builder.Services.AddScoped<IDatabaseProvisioner, DatabaseProvisioner>();
+// A medida que crees más servicios (pagos, correos), los registrarás aquí.
 
 // 4. Configuración de los Controladores de la API
 builder.Services.AddControllers();
 
-// 4. Configuración de Swagger para la documentación de la API
+// 5. Configuración de Swagger para la documentación de la API
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -62,18 +77,15 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// 5. Configuración de la Autenticación JWT (JSON Web Token)
+// 6. Configuración de la Autenticación JWT (JSON Web Token)
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // Leemos la clave secreta desde appsettings.json
         var tokenKeyString = builder.Configuration.GetSection("AppSettings:Token").Value;
         
-        // Verificamos que la clave exista para evitar errores en tiempo de ejecución
         if (string.IsNullOrEmpty(tokenKeyString))
             throw new Exception("La clave del token 'AppSettings:Token' no está configurada.");
 
-        // Parámetros para validar los tokens que recibe la API
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
@@ -83,21 +95,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-
 // --- Construcción de la Aplicación ---
 var app = builder.Build();
-
 
 // --- SECCIÓN DE CONFIGURACIÓN DEL PIPELINE HTTP ---
 // El orden aquí es muy importante.
 
-if (app.Environment.IsDevelopment())
+// Habilita Swagger y SwaggerUI en TODOS los entornos (Desarrollo y Producción)
+// Esto soluciona el error 404 que estabas viendo.
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    // Esto hace que Swagger esté disponible en la raíz (ej: /) en lugar de /swagger
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CCD API v1");
+    c.RoutePrefix = string.Empty; 
+});
 
+
+// Redirige HTTP a HTTPS (Certbot ya configura esto, pero es bueno tenerlo)
 app.UseHttpsRedirection();
+
+// Aplica la política de CORS
+app.UseCors(MyAllowSpecificOrigins);
 
 // 1. Autenticación: Verifica quién es el usuario (lee el token JWT)
 app.UseAuthentication();
@@ -108,4 +127,5 @@ app.UseAuthorization();
 // 3. Mapeo a los controladores: Dirige la petición al endpoint correcto
 app.MapControllers();
 
+// Inicia la aplicación
 app.Run();
