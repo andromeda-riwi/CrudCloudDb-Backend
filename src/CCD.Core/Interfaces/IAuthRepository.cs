@@ -1,16 +1,16 @@
 ﻿using CCD.Core;
 
-namespace CCD.Core.Interfaces;
-
-public interface IAuthRepository
+namespace CCD.Core.Interfaces
 {
-    // El '?' después de User indica que el método puede devolver un usuario o nulo.
-    // Esto es útil para manejar el caso en que el registro falla (ej: email ya existe).
-    Task<User?> Register(User user, string password);
+    public interface IAuthRepository
+    {
+        Task<User?> Register(User user, string password);
 
-    // El '?' después de string indica que el método puede devolver un token o nulo
-    // si el login falla.
-    Task<string?> Login(string email, string password);
+        // --- ESTA ES LA FIRMA CORRECTA ---
+        // Recibe el identificador (email o username) y la contraseña.
+        Task<string?> Login(string identifier, string password);
 
-    Task<bool> UserExists(string email);
+        // Actualizamos esto también para que sea coherente.
+        Task<bool> UserExists(string emailOrUsername);
+    }
 }

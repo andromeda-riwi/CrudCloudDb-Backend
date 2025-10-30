@@ -1,62 +1,71 @@
-﻿// --- Imports necesarios para el controlador ---
-using CCD.Api.Dtos;
+﻿using CCD.Api.Dtos;
 using CCD.Core;
 using CCD.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
-namespace CCD.Api.Controllers;
-
-[ApiController]
-[Route("api/[controller]")] // Ruta base: /api/auth
-public class AuthController : ControllerBase
+namespace CCD.Api.Controllers
 {
-    private readonly IAuthRepository _authRepo;
-
-    public AuthController(IAuthRepository authRepo)
+    [ApiController]
+    [Route("api/[controller]")] // Ruta base: /api/auth
+    public class AuthController : ControllerBase
     {
-        _authRepo = authRepo;
-    }
+        private readonly IAuthRepository _authRepo;
 
-    // --- ENDPOINT DE REGISTRO ---
-    [HttpPost("register")] // Ruta: POST /api/auth/register
-    public async Task<IActionResult> Register(UserRegisterDto request)
-    {
-        var userToCreate = new User
+        // El repositorio se inyecta a través del constructor (Inyección de Dependencias)
+        public AuthController(IAuthRepository authRepo)
         {
-            Email = request.Email
-        };
-
-        var createdUser = await _authRepo.Register(userToCreate, request.Password);
-
-        if (createdUser == null)
-        {
-            return BadRequest("El correo electrónico ya está en uso.");
+            _authRepo = authRepo;
         }
 
-        return Ok(new { message = "Usuario registrado exitosamente." });
-    }
-
-
-    // ▼▼▼ ESTE ES EL NUEVO MÉTODO QUE ESTÁS AÑADIENDO ▼▼▼
-    
-    // --- ENDPOINT DE LOGIN ---
-    [HttpPost("login")] // Ruta: POST /api/auth/login
-    public async Task<IActionResult> Login(UserLoginDto request)
-    {
-        // Llama al método Login del repositorio, que hace todo el trabajo pesado.
-        var token = await _authRepo.Login(request.Email, request.Password);
-
-        // Si el repositorio devuelve null, significa que las credenciales son inválidas.
-        if (token == null)
+        // --- ENDPOINT DE REGISTRO ---
+        [HttpPost("register")] // Ruta: POST /api/auth/register
+        public async Task<IActionResult> Register(UserRegisterDto request)
         {
-            // Devolvemos un 401 Unauthorized, que es el código de estado correcto
-            // para un intento de login fallido.
-            return Unauthorized("Credenciales inválidas.");
-        }
+            // 1. Verificamos si el email o el username ya existen para dar un error claro.
+            if (await _authRepo.UserExists(request.Email) || await _authRepo.UserExists(request.UserName))
+            {
+                return BadRequest("El correo electrónico o el nombre de usuario ya están en uso.");
+            }
 
-        // Si el login es exitoso, devolvemos un 200 OK con el token JWT.
-        // El frontend guardará este token para usarlo en futuras peticiones.
-        return Ok(new { token });
+            // 2. Mapeamos los datos del DTO a la entidad User que se guardará en la BD.
+            var userToCreate = new User
+            {
+                Name = request.Name,
+                LastName = request.LastName,
+                UserName = request.UserName,
+                Email = request.Email
+            };
+
+            // 3. Llamamos al repositorio para que cree el usuario y hashee la contraseña.
+            var createdUser = await _authRepo.Register(userToCreate, request.Password);
+
+            // 4. Si por alguna razón la creación falla, devolvemos un error.
+            if (createdUser == null)
+            {
+                return StatusCode(500, "No se pudo crear el usuario en este momento.");
+            }
+
+            // 5. Si todo sale bien, devolvemos un 200 OK.
+            return Ok(new { message = "Usuario registrado exitosamente." });
+        }
+        
+        // --- ENDPOINT DE LOGIN ---
+        [HttpPost("login")] // Ruta: POST /api/auth/login
+        public async Task<IActionResult> Login(UserLoginDto request)
+        {
+            // 1. Llamamos al repositorio pasándole el identificador y la contraseña como strings.
+            // El repositorio se encargará de la lógica de buscar por email o username.
+            var token = await _authRepo.Login(request.Identifier, request.Password);
+
+            // 2. Si el token es nulo, significa que las credenciales son inválidas.
+            if (string.IsNullOrEmpty(token))
+            {
+                // Devolvemos 401 Unauthorized, el código estándar para un login fallido.
+                return Unauthorized("Credenciales inválidas.");
+            }
+            
+            // 3. Si el login es exitoso, devolvemos el token en un objeto JSON.
+            return Ok(new { token });
+        }
     }
-    // ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲
 }
