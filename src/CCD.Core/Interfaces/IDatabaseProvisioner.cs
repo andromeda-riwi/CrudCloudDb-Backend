@@ -1,4 +1,4 @@
-﻿using CCD.Core.Dtos; // Esta línea es crucial
+using CCD.Core.Dtos;
 
 namespace CCD.Core.Interfaces;
 

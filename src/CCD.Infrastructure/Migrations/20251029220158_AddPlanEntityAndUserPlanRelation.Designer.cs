@@ -3,6 +3,7 @@ using System;
 using CCD.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CCD.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251029220158_AddPlanEntityAndUserPlanRelation")]
+    partial class AddPlanEntityAndUserPlanRelation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -47,19 +50,14 @@ namespace CCD.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("DatabaseInstances", (string)null);
+                    b.ToTable("DatabaseInstances");
                 });
 
             modelBuilder.Entity("CCD.Core.Plan", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DatabaseLimitPerEngine")
-                        .HasColumnType("integer");
+                        .HasColumnType("uuid");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -67,53 +65,13 @@ namespace CCD.Infrastructure.Migrations
                     b.Property<int>("MaxDatabases")
                         .HasColumnType("integer");
 
-                    b.Property<string>("MercadoPagoPriceId")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<decimal>("Price")
-                        .HasColumnType("decimal(18,2)");
-
                     b.HasKey("Id");
 
-                    b.ToTable("Plans", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            DatabaseLimitPerEngine = 2,
-                            IsActive = true,
-                            MaxDatabases = 2,
-                            MercadoPagoPriceId = "N/A",
-                            Name = "Gratuito",
-                            Price = 0.00m
-                        },
-                        new
-                        {
-                            Id = 2,
-                            DatabaseLimitPerEngine = 5,
-                            IsActive = true,
-                            MaxDatabases = 5,
-                            MercadoPagoPriceId = "price_id_intermedio",
-                            Name = "Intermedio",
-                            Price = 5000.00m
-                        },
-                        new
-                        {
-                            Id = 3,
-                            DatabaseLimitPerEngine = 10,
-                            IsActive = true,
-                            MaxDatabases = 10,
-                            MercadoPagoPriceId = "price_id_avanzado",
-                            Name = "Avanzado",
-                            Price = 10000.00m
-                        });
+                    b.ToTable("Plans");
                 });
 
             modelBuilder.Entity("CCD.Core.User", b =>
@@ -134,23 +92,20 @@ namespace CCD.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("bytea");
 
-                    b.Property<int>("PlanId")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Email")
-                        .IsUnique();
-
                     b.HasIndex("PlanId");
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("CCD.Core.DatabaseInstance", b =>
                 {
                     b.HasOne("CCD.Core.User", "User")
-                        .WithMany("DatabaseInstances")
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -161,22 +116,12 @@ namespace CCD.Infrastructure.Migrations
             modelBuilder.Entity("CCD.Core.User", b =>
                 {
                     b.HasOne("CCD.Core.Plan", "Plan")
-                        .WithMany("Users")
+                        .WithMany()
                         .HasForeignKey("PlanId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Plan");
-                });
-
-            modelBuilder.Entity("CCD.Core.Plan", b =>
-                {
-                    b.Navigation("Users");
-                });
-
-            modelBuilder.Entity("CCD.Core.User", b =>
-                {
-                    b.Navigation("DatabaseInstances");
                 });
 #pragma warning restore 612, 618
         }

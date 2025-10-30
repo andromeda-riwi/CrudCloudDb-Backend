@@ -1,12 +1,14 @@
-﻿namespace CCD.Core;
+namespace CCD.Core;
 
 public class Plan
 {
-    public int Id { get; set; } // Un simple int es suficiente aquí (1=Gratuito, 2=Intermedio, 3=Avanzado)
-    public string Name { get; set; } = string.Empty;
-    public int DatabaseLimitPerEngine { get; set; } // Límite de BD (2, 5, 10)
-    public decimal Price { get; set; } // Precio mensual (0, 5000, 10000)
-    public string MercadoPagoPriceId { get; set; } = string.Empty; // ID del precio/suscripción en Mercado Pago
+    public int Id { get; set; } // Auto-increment integer en la base de datos
+    public string Name { get; set; } = string.Empty; // "Free", "Basic", "Premium", etc.
+    public int DatabaseLimitPerEngine { get; set; } // Límite por motor de base de datos
+    public decimal Price { get; set; } // Precio del plan
+    public string MercadoPagoPriceId { get; set; } = string.Empty; // ID de precio en Mercado Pago
+    public int MaxDatabases { get; set; } // Límite total de bases de datos permitidas
+    public bool IsActive { get; set; } = true;
     
     // Propiedad de navegación: Un plan puede tener muchos usuarios
     public ICollection<User> Users { get; set; } = new List<User>();

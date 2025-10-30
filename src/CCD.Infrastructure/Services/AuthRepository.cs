@@ -37,6 +37,31 @@ public class AuthRepository : IAuthRepository
         user.PasswordHash = passwordHash;
         user.PasswordSalt = passwordSalt;
 
+        // Asignar el plan gratuito por defecto (buscar "Gratuito" del seeding o "Free")
+        var freePlan = await _context.Plans.FirstOrDefaultAsync(p => p.Name == "Gratuito" || p.Name == "Free");
+        if (freePlan == null)
+        {
+            // Si no existe ningún plan gratuito, usar el primero del seeding (Id = 1)
+            freePlan = await _context.Plans.FirstOrDefaultAsync(p => p.Id == 1);
+            if (freePlan == null)
+            {
+                // Último recurso: crear un plan gratuito
+                freePlan = new Plan
+                {
+                    Name = "Gratuito",
+                    DatabaseLimitPerEngine = 2,
+                    Price = 0,
+                    MercadoPagoPriceId = "N/A",
+                    MaxDatabases = 2,
+                    IsActive = true
+                };
+                await _context.Plans.AddAsync(freePlan);
+                await _context.SaveChangesAsync();
+            }
+        }
+        
+        user.PlanId = freePlan.Id;
+
         await _context.Users.AddAsync(user);
         await _context.SaveChangesAsync();
 

@@ -1,24 +1,45 @@
 ﻿using CCD.Core;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration; // <-- Importante añadir esto
-using System.IO; // <-- Importante añadir esto
+using Microsoft.Extensions.Configuration;
+using System.IO;
 
 namespace CCD.Infrastructure.Data;
 
 public class ApplicationDbContext : DbContext
 {
-    // --- CONSTRUCTOR ÚNICO ---
-    // Este constructor es utilizado tanto por la aplicación en tiempo de ejecución
-    // como por las herramientas de diseño de EF Core (por ejemplo, para crear migraciones).
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
-    {
-    }
+    // --- CONSTRUCTOR PRINCIPAL ---
+    // Este es el que usa tu aplicación en tiempo de ejecución, inyectado desde Program.cs
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
+
+    // --- CONSTRUCTOR SECUNDARIO (para herramientas de diseño) ---
+    // Este constructor no hace nada, permitiendo que el método OnConfiguring se encargue.
+    public ApplicationDbContext() { }
 
     // --- DEFINICIÓN DE LAS TABLAS (DbSets) ---
     // Cada DbSet<T> representa una tabla en la base de datos.
     public DbSet<User> Users { get; set; }
     public DbSet<Plan> Plans { get; set; }
     public DbSet<DatabaseInstance> DatabaseInstances { get; set; }
+
+    // --- MÉTODO DE CONFIGURACIÓN DE RESPALDO ---
+    // Este método solo se llama si el DbContext se crea usando el constructor vacío.
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            // Construimos la configuración para encontrar el appsettings.json
+            IConfigurationRoot configuration = new ConfigurationBuilder()
+                .SetBasePath(Path.Combine(Directory.GetCurrentDirectory(), "../CCD.Api"))
+                .AddJsonFile("appsettings.json")
+                .Build();
+            
+            // Obtenemos la cadena de conexión
+            var connectionString = configuration.GetConnectionString("DefaultConnection");
+            
+            // Configuramos el proveedor de base de datos
+            optionsBuilder.UseNpgsql(connectionString);
+        }
+    }
 
     // --- CONFIGURACIÓN DEL MODELO DE DATOS (OnModelCreating) ---
     // Este método se utiliza para configurar el modelo de datos de forma explícita.
@@ -91,7 +112,9 @@ public class ApplicationDbContext : DbContext
                 Name = "Gratuito", 
                 DatabaseLimitPerEngine = 2, 
                 Price = 0.00m, 
-                MercadoPagoPriceId = "N/A" // No tiene ID de pago
+                MercadoPagoPriceId = "N/A",
+                MaxDatabases = 2,
+                IsActive = true
             },
             new Plan 
             { 
@@ -99,7 +122,9 @@ public class ApplicationDbContext : DbContext
                 Name = "Intermedio", 
                 DatabaseLimitPerEngine = 5, 
                 Price = 5000.00m, 
-                MercadoPagoPriceId = "price_id_intermedio" // Reemplazar con el ID real de Mercado Pago
+                MercadoPagoPriceId = "price_id_intermedio",
+                MaxDatabases = 5,
+                IsActive = true
             },
             new Plan 
             { 
@@ -107,7 +132,9 @@ public class ApplicationDbContext : DbContext
                 Name = "Avanzado", 
                 DatabaseLimitPerEngine = 10, 
                 Price = 10000.00m, 
-                MercadoPagoPriceId = "price_id_avanzado" // Reemplazar con el ID real de Mercado Pago
+                MercadoPagoPriceId = "price_id_avanzado",
+                MaxDatabases = 10,
+                IsActive = true
             }
         );
     }

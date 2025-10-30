@@ -6,8 +6,7 @@ public class User
     public string Email { get; set; } = string.Empty;
     public byte[] PasswordHash { get; set; } = Array.Empty<byte>();
     public byte[] PasswordSalt { get; set; } = Array.Empty<byte>();
-
-    // --- AÑADE ESTAS LÍNEAS ---
+    
     // Relación con el Plan
     public int PlanId { get; set; } // Foreign Key
     public Plan Plan { get; set; } = null!; // Navigation Property
