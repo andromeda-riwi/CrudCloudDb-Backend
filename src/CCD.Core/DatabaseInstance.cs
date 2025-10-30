@@ -1,17 +1,22 @@
-﻿namespace CCD.Core;
-
-public class DatabaseInstance
+﻿namespace CCD.Core
 {
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty; // Valor por defecto
-    public string Engine { get; set; } = string.Empty; // Valor por defecto
-    public string Status { get; set; } = string.Empty; // Valor por defecto
-    
-    // Relación con el Usuario
-    public Guid UserId { get; set; }
+    public class DatabaseInstance
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Engine { get; set; } = string.Empty;
 
-    // Aquí usamos 'null!' (el operador "damn-it") para decirle al compilador:
-    // "Confía en mí, sé que esta propiedad 'User' no será nula cuando la usemos de verdad,
-    // porque Entity Framework se encargará de cargarla".
-    public User User { get; set; } = null!;
+        // --- AÑADE ESTAS PROPIEDADES PARA GUARDAR LOS DETALLES DE CONEXIÓN ---
+        public string Host { get; set; } = string.Empty;
+        public int Port { get; set; }
+        public string DbUsername { get; set; } = string.Empty;
+        // Nota: Omitimos la contraseña por seguridad, como planeamos.
+         public string Status { get; set; } = string.Empty;
+
+
+        // Clave foránea para la relación con User
+        public Guid UserId { get; set; }
+        // Propiedad de navegación a User
+        public User User { get; set; } = null!;
+    }
 }
