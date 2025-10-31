@@ -20,7 +20,8 @@ builder.Services.AddCors(options =>
                       {
                           // PERMITE QUE TU FRONTEND SE COMUNIQUE CON LA API
                           // Si tu frontend corre en otro puerto local, añádelo aquí
-                          policy.WithOrigins("http://localhost:8080", 
+                          policy.WithOrigins("http://localhost:5173",
+                                             "http://localhost:8080", 
                                              "https://voyager.andrescortes.dev")
                                 .AllowAnyHeader()
                                 .AllowAnyMethod();
