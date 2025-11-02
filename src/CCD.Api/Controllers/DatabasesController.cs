@@ -1,4 +1,4 @@
-﻿// --- Imports necesarios ---
+﻿﻿// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Infrastructure.Data;
@@ -53,6 +53,46 @@ public class DatabasesController : ControllerBase
 
         // 4. Devolvemos la lista de bases de datos.
         return Ok(databases);
+    }
+
+    // --- ENDPOINT PARA OBTENER ESTADÍSTICAS DEL DASHBOARD ---
+    // Responde a peticiones GET en /api/databases/stats
+    [HttpGet("stats")]
+    public async Task<IActionResult> GetDashboardStats()
+    {
+        // 1. Obtenemos el ID del usuario del token.
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdString == null)
+        {
+            return Unauthorized();
+        }
+        var userId = Guid.Parse(userIdString);
+
+        // 2. Obtener todas las bases de datos del usuario
+        var databases = await _context.DatabaseInstances
+            .Where(db => db.UserId == userId)
+            .ToListAsync();
+
+        // 3. Calcular estadísticas por motor
+        var databasesByEngine = databases
+            .GroupBy(db => db.Engine)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // 4. Obtener plan del usuario (por ahora hardcoded a "Básico")
+        var currentPlan = "Básico";
+        var maxDatabases = 10; // Límite del plan básico
+        var monthlyPrice = 0; // Plan gratuito
+
+        // 5. Retornar estadísticas
+        return Ok(new
+        {
+            totalDatabases = databases.Count,
+            databasesByEngine = databasesByEngine,
+            currentPlan = currentPlan,
+            maxDatabases = maxDatabases,
+            monthlyPrice = monthlyPrice,
+            nextBillingDate = (string?)null
+        });
     }
 
     // --- ENDPOINT PARA CREAR UNA NUEVA BASE DE DATOS ---
