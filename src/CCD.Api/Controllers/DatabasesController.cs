@@ -134,7 +134,6 @@ public class DatabasesController : ControllerBase
             // - CREATE DATABASE asignando el usuario como dueño
             var connectionDetails = await _provisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
-            // Si algo salió mal y no obtuvimos las credenciales, devolvemos error 500
             if (connectionDetails == null)
             {
                 return StatusCode(500, new { message = "Error inesperado al crear la base de datos." });
@@ -147,6 +146,7 @@ public class DatabasesController : ControllerBase
                 Name = connectionDetails.DatabaseName,  // Nombre generado automáticamente
                 Engine = createDto.Engine,              // Motor solicitado (PostgreSQL, MySQL, etc.)
                 Status = "Active",                      // Estado inicial: activa
+                DbUsername = connectionDetails.Username, // Usuario de la base de datos
                 UserId = userId                         // Asociar al usuario actual
             };
 
@@ -181,7 +181,6 @@ public class DatabasesController : ControllerBase
         }
     }
 
-
     // --- ENDPOINT PARA ELIMINAR UNA BASE DE DATOS ---
     // Responde a peticiones DELETE en /api/databases/some-guid-id
     [HttpDelete("{id}")]
@@ -206,8 +205,29 @@ public class DatabasesController : ControllerBase
             return Forbid(); // La base de datos no pertenece a este usuario
         }
 
-        // TODO: Llamar a un servicio para eliminar la base de datos y el usuario del servidor real.
+        // Llamar al servicio para eliminar la base de datos y el usuario del servidor real
+        try
+        {
+            var deleted = await _provisioner.DeleteDatabaseAsync(
+                dbInstance.Engine, 
+                dbInstance.Name, 
+                dbInstance.DbUsername
+            );
 
+            if (!deleted)
+            {
+                return StatusCode(500, new { message = "No se pudo eliminar la base de datos del servidor." });
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { 
+                message = "Error al eliminar la base de datos del servidor.", 
+                detail = ex.Message 
+            });
+        }
+
+        // Eliminar el registro de nuestra base de datos de gestión
         _context.DatabaseInstances.Remove(dbInstance);
         await _context.SaveChangesAsync();
 
