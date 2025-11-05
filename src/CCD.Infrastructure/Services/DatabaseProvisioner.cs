@@ -24,6 +24,15 @@ public class DatabaseProvisioner : IDatabaseProvisioner
 
         // 1. Obtener la cadena de conexión del SUPERUSUARIO desde appsettings.json
         var adminConnectionString = _config.GetConnectionString("AdminPostgresConnection");
+        
+        // VALIDACIÓN: Verificar que la cadena de conexión esté configurada
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            throw new InvalidOperationException(
+                "La cadena de conexión 'AdminPostgresConnection' no está configurada en appsettings.json. " +
+                "Esta conexión debe apuntar al usuario 'postgres' con permisos de superusuario para crear bases de datos."
+            );
+        }
 
         // 2. Generar credenciales seguras y aleatorias
         var dbName = $"user_{userId.ToString().Substring(0, 8)}_{Guid.NewGuid().ToString().Substring(0, 4)}";

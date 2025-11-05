@@ -1,12 +1,12 @@
-﻿﻿// --- Imports necesarios ---
+// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
+using CCD.Core; // Para usar la entidad DatabaseInstance
+using CCD.Core.Interfaces; // Para usar IDatabaseProvisioner
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
-namespace CCD.Api.Controllers;
 
 // [Authorize] asegura que solo los usuarios con un token JWT válido pueden acceder a estos endpoints.
 [Authorize]
@@ -15,14 +15,14 @@ namespace CCD.Api.Controllers;
 public class DatabasesController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    // Más adelante, aquí inyectarás el servicio de Richi:
-    // private readonly IDatabaseProvisioner _provisioner;
+    // Servicio que crea bases de datos reales en PostgreSQL
+    private readonly IDatabaseProvisioner _provisioner;
 
     // Inyectamos el DbContext para interactuar con nuestra base de datos de gestión.
-    public DatabasesController(ApplicationDbContext context /* , IDatabaseProvisioner provisioner */)
+    public DatabasesController(ApplicationDbContext context, IDatabaseProvisioner provisioner)
     {
         _context = context;
-        // _provisioner = provisioner;
+        _provisioner = provisioner;
     }
 
     // --- ENDPOINT PARA LISTAR BASES DE DATOS ---
@@ -124,33 +124,41 @@ public class DatabasesController : ControllerBase
         // --- FIN DE LA LÓGICA DE CUOTAS ---
 
 
-        // --- LÓGICA DE APROVISIONAMIENTO (Integración con el trabajo de Richi) ---
-        // TODO: Este bloque se activará cuando integres el servicio de Richi.
-        /*
-            // 1. Llamar al servicio de aprovisionamiento
+        // --- LÓGICA DE APROVISIONAMIENTO ---
+        // Aquí es donde realmente creamos la base de datos en PostgreSQL
+        try
+        {
+            // PASO 1: Llamar al servicio que crea la base de datos real
+            // Este servicio se conecta a PostgreSQL como superusuario y ejecuta:
+            // - CREATE USER con una contraseña segura generada automáticamente
+            // - CREATE DATABASE asignando el usuario como dueño
             var connectionDetails = await _provisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
+            // Si algo salió mal y no obtuvimos las credenciales, devolvemos error 500
             if (connectionDetails == null)
             {
-                return StatusCode(500, "Hubo un error al crear la base de datos.");
+                return StatusCode(500, new { message = "Error inesperado al crear la base de datos." });
             }
 
-            // 2. Crear la nueva entidad para guardarla en nuestra DB de gestión
-            var newDbInstance = new Core.DatabaseInstance
+            // PASO 2: Guardar el registro en nuestra base de datos de gestión
+            // Esto es para que el usuario pueda ver sus bases de datos en el dashboard
+            var newDbInstance = new DatabaseInstance
             {
-                Name = connectionDetails.DatabaseName,
-                Engine = createDto.Engine,
-                Status = "Active",
-                UserId = userId
+                Name = connectionDetails.DatabaseName,  // Nombre generado automáticamente
+                Engine = createDto.Engine,              // Motor solicitado (PostgreSQL, MySQL, etc.)
+                Status = "Active",                      // Estado inicial: activa
+                UserId = userId                         // Asociar al usuario actual
             };
 
-            // 3. Guardar el registro en nuestra base de datos
+            // Agregamos la nueva instancia a la base de datos y guardamos los cambios
             await _context.DatabaseInstances.AddAsync(newDbInstance);
             await _context.SaveChangesAsync();
 
-            // 4. TODO: Enviar correo con las credenciales (connectionDetails)
+            // PASO 3: TODO - Enviar correo electrónico con las credenciales
+            // connectionDetails contiene: Host, Port, DatabaseName, Username, Password
+            // Aquí deberías integrar un servicio de email (SendGrid, SMTP, etc.)
 
-            // 5. Devolver la información de la nueva base de datos creada
+            // PASO 4: Devolver la respuesta exitosa con código 201 Created
             var responseDto = new DatabaseResponseDto
             {
                 Id = newDbInstance.Id,
@@ -159,11 +167,18 @@ public class DatabasesController : ControllerBase
                 Status = newDbInstance.Status
             };
 
+            // CreatedAtAction devuelve 201 y la URL donde se puede consultar el recurso creado
             return CreatedAtAction(nameof(GetDatabasesForUser), new { id = responseDto.Id }, responseDto);
-        */
-        
-        // Respuesta temporal mientras el servicio de Richi no está integrado
-        return Ok(new { message = $"Validación de cuota exitosa. La creación de la base de datos {createDto.Engine} está en proceso..." });
+        }
+        catch (Exception ex)
+        {
+            // Si ocurre cualquier error (conexión, permisos, etc.), lo capturamos aquí
+            // TODO: En producción, enviar este error a un sistema de logging o webhook
+            return StatusCode(500, new { 
+                message = "No se pudo crear la base de datos.", 
+                detail = ex.Message 
+            });
+        }
     }
 
 
