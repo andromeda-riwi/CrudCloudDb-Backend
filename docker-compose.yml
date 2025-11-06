@@ -1,0 +1,16 @@
+version: '3.8'
+
+# Define los servicios (contenedores) que compondrán tu aplicación.
+services:
+  # Nombre del servicio, puede ser cualquiera (ej: "api", "backend", "webapp").
+  api:
+    # Esta sección le dice a Docker cómo construir la imagen para este servicio.
+    build:
+      # 'context' es la carpeta raíz de tu proyecto, donde Docker buscará los archivos.
+      # El '.' significa "la carpeta actual donde está este docker-compose.yml".
+      context: .
+      # 'dockerfile' es la ruta al plano de construcción específico para este servicio.
+      dockerfile: ./src/CCD.Api/Dockerfile
+    
+    # Asigna un nombre fijo y fácil de recordar al contenedor una vez que se cree.
+    container_name: ccd_api
