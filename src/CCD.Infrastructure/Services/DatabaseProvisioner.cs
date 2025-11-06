@@ -364,6 +364,36 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         await using var connection = new MySqlConnection(adminConnectionString);
         await connection.OpenAsync();
 
+        // Terminar todas las conexiones activas a la base de datos
+        var killConnectionsCommand = $@"
+            SELECT CONCAT('KILL ', id, ';') 
+            FROM information_schema.processlist 
+            WHERE db = '{databaseName}' AND id != CONNECTION_ID();";
+        
+        var connectionIds = new List<string>();
+        await using (var cmd = new MySqlCommand(killConnectionsCommand, connection))
+        {
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                connectionIds.Add(reader.GetString(0));
+            }
+        }
+
+        // Ejecutar los comandos KILL para terminar las conexiones
+        foreach (var killCmd in connectionIds)
+        {
+            try
+            {
+                await using var cmd = new MySqlCommand(killCmd, connection);
+                await cmd.ExecuteNonQueryAsync();
+            }
+            catch
+            {
+                // Ignorar errores si la conexión ya se cerró
+            }
+        }
+
         // Eliminar la base de datos
         var dropDbCommand = $"DROP DATABASE IF EXISTS `{databaseName}`;";
         await using (var cmd = new MySqlCommand(dropDbCommand, connection))
