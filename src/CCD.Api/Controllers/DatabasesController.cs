@@ -47,7 +47,8 @@ public class DatabasesController : ControllerBase
                 Id = db.Id,
                 Name = db.Name,
                 Engine = db.Engine,
-                Status = db.Status
+                Status = db.Status,
+                CreatedAt = db.CreatedAt
             })
             .ToListAsync();
 
@@ -147,7 +148,8 @@ public class DatabasesController : ControllerBase
                 Engine = createDto.Engine,              // Motor solicitado (PostgreSQL, MySQL, etc.)
                 Status = "Active",                      // Estado inicial: activa
                 DbUsername = connectionDetails.Username, // Usuario de la base de datos
-                UserId = userId                         // Asociar al usuario actual
+                UserId = userId,                         // Asociar al usuario actual
+                CreatedAt = DateTime.UtcNow
             };
 
             // Agregamos la nueva instancia a la base de datos y guardamos los cambios
