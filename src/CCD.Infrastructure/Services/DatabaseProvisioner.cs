@@ -2,6 +2,8 @@ using CCD.Core.Dtos;
 using CCD.Core.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using MySql.Data.MySqlClient;
+using Microsoft.Data.SqlClient;
 
 namespace CCD.Infrastructure.Services;
 
@@ -16,12 +18,28 @@ public class DatabaseProvisioner : IDatabaseProvisioner
 
     public async Task<DatabaseConnectionDetails?> CreateDatabaseAsync(string engine, Guid userId)
     {
-        if (engine.ToLower() != "postgresql")
+        var engineLower = engine.ToLower();
+        
+        if (engineLower == "postgresql")
         {
-            // Por ahora, solo soportamos PostgreSQL
-            throw new NotImplementedException("El motor de base de datos no es soportado.");
+            return await CreatePostgreSqlDatabaseAsync(userId);
         }
+        else if (engineLower == "mysql")
+        {
+            return await CreateMySqlDatabaseAsync(userId);
+        }
+        else if (engineLower == "sqlserver")
+        {
+            return await CreateSqlServerDatabaseAsync(userId);
+        }
+        else
+        {
+            throw new NotImplementedException($"El motor de base de datos '{engine}' no es soportado.");
+        }
+    }
 
+    private async Task<DatabaseConnectionDetails> CreatePostgreSqlDatabaseAsync(Guid userId)
+    {
         // 1. Obtener la cadena de conexión del SUPERUSUARIO desde appsettings.json
         var adminConnectionString = _config.GetConnectionString("AdminPostgresConnection");
         
@@ -44,7 +62,6 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         await connection.OpenAsync();
         
         // 4. Ejecutar comandos SQL para crear usuario y base de datos
-        // ¡OJO! Usar parámetros para evitar inyección SQL
         var createUserCommand = $"CREATE USER \"{dbUser}\" WITH PASSWORD '{dbPassword}';";
         var createDbCommand = $"CREATE DATABASE \"{dbName}\" OWNER \"{dbUser}\";";
 
@@ -57,11 +74,93 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // 5. Devolver los detalles de la conexión
+        // 5. Revocar permisos de DROP DATABASE para que solo se pueda eliminar vía API
+        var revokeDropCommand = $"REVOKE CREATE ON DATABASE \"{dbName}\" FROM \"{dbUser}\";";
+        await using (var cmd = new NpgsqlCommand(revokeDropCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Conectarse a la nueva base de datos para configurar permisos del schema
+        var dbConnectionString = $"Host={connection.Host};Port={connection.Port};Database={dbName};Username={dbUser};Password={dbPassword}";
+        await using var dbConnection = new NpgsqlConnection(dbConnectionString);
+        await dbConnection.OpenAsync();
+
+        // Dar permisos completos sobre el schema public pero sin DROP DATABASE
+        var grantSchemaCommand = "GRANT ALL PRIVILEGES ON SCHEMA public TO \"" + dbUser + "\";";
+        await using (var cmd = new NpgsqlCommand(grantSchemaCommand, dbConnection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // 6. Devolver los detalles de la conexión
         return new DatabaseConnectionDetails
         {
             Host = connection.Host,
             Port = connection.Port,
+            DatabaseName = dbName,
+            Username = dbUser,
+            Password = dbPassword
+        };
+    }
+
+    private async Task<DatabaseConnectionDetails> CreateMySqlDatabaseAsync(Guid userId)
+    {
+        // 1. Obtener la cadena de conexión del SUPERUSUARIO desde appsettings.json
+        var adminConnectionString = _config.GetConnectionString("AdminMySqlConnection");
+        
+        // VALIDACIÓN: Verificar que la cadena de conexión esté configurada
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            throw new InvalidOperationException(
+                "La cadena de conexión 'AdminMySqlConnection' no está configurada en appsettings.json. " +
+                "Esta conexión debe apuntar al usuario 'root' con permisos de superusuario para crear bases de datos."
+            );
+        }
+
+        // 2. Generar credenciales seguras y aleatorias
+        var dbName = $"user_{userId.ToString().Substring(0, 8)}_{Guid.NewGuid().ToString().Substring(0, 4)}";
+        var dbUser = $"user_{Guid.NewGuid().ToString("N").Substring(0, 12)}";
+        var dbPassword = GenerateSecurePassword();
+
+        // 3. Conectarse al servidor MySQL
+        await using var connection = new MySqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+        
+        // 4. Ejecutar comandos SQL para crear base de datos y usuario
+        var createDbCommand = $"CREATE DATABASE `{dbName}`;";
+        var createUserCommand = $"CREATE USER '{dbUser}'@'%' IDENTIFIED BY '{dbPassword}';";
+        
+        // Otorgar permisos específicos SIN DROP DATABASE (solo operaciones CRUD y DDL)
+        var grantPrivilegesCommand = $@"GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, 
+                                         INDEX, REFERENCES, CREATE TEMPORARY TABLES, LOCK TABLES, 
+                                         EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, 
+                                         ALTER ROUTINE, TRIGGER 
+                                         ON `{dbName}`.* TO '{dbUser}'@'%';";
+        var flushPrivilegesCommand = "FLUSH PRIVILEGES;";
+
+        await using (var cmd = new MySqlCommand(createDbCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+        await using (var cmd = new MySqlCommand(createUserCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+        await using (var cmd = new MySqlCommand(grantPrivilegesCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+        await using (var cmd = new MySqlCommand(flushPrivilegesCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // 5. Devolver los detalles de la conexión
+        return new DatabaseConnectionDetails
+        {
+            Host = connection.DataSource.Split(':')[0], // Extraer host sin puerto
+            Port = connection.ServerVersion != null ? 3306 : 3306, // Puerto por defecto MySQL
             DatabaseName = dbName,
             Username = dbUser,
             Password = dbPassword
@@ -97,5 +196,237 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         }
 
         return new string(password);
+    }
+
+    private async Task<DatabaseConnectionDetails> CreateSqlServerDatabaseAsync(Guid userId)
+    {
+        // 1. Obtener la cadena de conexión del SUPERUSUARIO desde appsettings.json
+        var adminConnectionString = _config.GetConnectionString("AdminSqlServerConnection");
+        
+        // VALIDACIÓN: Verificar que la cadena de conexión esté configurada
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            throw new InvalidOperationException(
+                "La cadena de conexión 'AdminSqlServerConnection' no está configurada en appsettings.json. " +
+                "Esta conexión debe apuntar al usuario 'sa' con permisos de administrador para crear bases de datos."
+            );
+        }
+
+        // 2. Generar credenciales seguras y aleatorias
+        var dbName = $"user_{userId.ToString().Substring(0, 8)}_{Guid.NewGuid().ToString().Substring(0, 4)}";
+        var dbUser = $"user_{Guid.NewGuid().ToString("N").Substring(0, 12)}";
+        var dbPassword = GenerateSecurePassword();
+
+        // 3. Conectarse al servidor SQL Server
+        await using var connection = new SqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+        
+        // 4. Ejecutar comandos SQL para crear base de datos y usuario
+        // Crear la base de datos
+        var createDbCommand = $"CREATE DATABASE [{dbName}];";
+        await using (var cmd = new SqlCommand(createDbCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Crear el login (usuario a nivel de servidor)
+        var createLoginCommand = $"CREATE LOGIN [{dbUser}] WITH PASSWORD = '{dbPassword}';";
+        await using (var cmd = new SqlCommand(createLoginCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Cambiar al contexto de la nueva base de datos y crear el usuario
+        var useDbCommand = $"USE [{dbName}];";
+        await using (var cmd = new SqlCommand(useDbCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Crear usuario en la base de datos y asignar permisos
+        var createUserCommand = $"CREATE USER [{dbUser}] FOR LOGIN [{dbUser}];";
+        await using (var cmd = new SqlCommand(createUserCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Otorgar permisos específicos SIN db_owner (que permite DROP DATABASE)
+        // db_datareader: Leer datos
+        // db_datawriter: Escribir datos
+        // db_ddladmin: Crear/modificar tablas, vistas, etc. (pero NO DROP DATABASE)
+        var grantDataReaderCommand = $"ALTER ROLE db_datareader ADD MEMBER [{dbUser}];";
+        await using (var cmd = new SqlCommand(grantDataReaderCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var grantDataWriterCommand = $"ALTER ROLE db_datawriter ADD MEMBER [{dbUser}];";
+        await using (var cmd = new SqlCommand(grantDataWriterCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var grantDdlAdminCommand = $"ALTER ROLE db_ddladmin ADD MEMBER [{dbUser}];";
+        await using (var cmd = new SqlCommand(grantDdlAdminCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // 5. Devolver los detalles de la conexión
+        return new DatabaseConnectionDetails
+        {
+            Host = connection.DataSource.Split(',')[0], // Extraer host sin puerto
+            Port = 1433, // Puerto por defecto SQL Server
+            DatabaseName = dbName,
+            Username = dbUser,
+            Password = dbPassword
+        };
+    }
+
+    public async Task<bool> DeleteDatabaseAsync(string engine, string databaseName, string username)
+    {
+        var engineLower = engine.ToLower();
+        
+        try
+        {
+            if (engineLower == "postgresql")
+            {
+                return await DeletePostgreSqlDatabaseAsync(databaseName, username);
+            }
+            else if (engineLower == "mysql")
+            {
+                return await DeleteMySqlDatabaseAsync(databaseName, username);
+            }
+            else if (engineLower == "sqlserver")
+            {
+                return await DeleteSqlServerDatabaseAsync(databaseName, username);
+            }
+            else
+            {
+                throw new NotImplementedException($"El motor de base de datos '{engine}' no es soportado.");
+            }
+        }
+        catch (Exception)
+        {
+            // Si hay algún error, devolvemos false
+            return false;
+        }
+    }
+
+    private async Task<bool> DeletePostgreSqlDatabaseAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminPostgresConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return false;
+        }
+
+        await using var connection = new NpgsqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+
+        // Terminar todas las conexiones activas a la base de datos
+        var terminateConnectionsCommand = $@"
+            SELECT pg_terminate_backend(pg_stat_activity.pid)
+            FROM pg_stat_activity
+            WHERE pg_stat_activity.datname = '{databaseName}'
+            AND pid <> pg_backend_pid();";
+        
+        await using (var cmd = new NpgsqlCommand(terminateConnectionsCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Eliminar la base de datos
+        var dropDbCommand = $"DROP DATABASE IF EXISTS \"{databaseName}\";";
+        await using (var cmd = new NpgsqlCommand(dropDbCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Eliminar el usuario
+        var dropUserCommand = $"DROP USER IF EXISTS \"{username}\";";
+        await using (var cmd = new NpgsqlCommand(dropUserCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        return true;
+    }
+
+    private async Task<bool> DeleteMySqlDatabaseAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMySqlConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return false;
+        }
+
+        await using var connection = new MySqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+
+        // Eliminar la base de datos
+        var dropDbCommand = $"DROP DATABASE IF EXISTS `{databaseName}`;";
+        await using (var cmd = new MySqlCommand(dropDbCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Eliminar el usuario
+        var dropUserCommand = $"DROP USER IF EXISTS '{username}'@'%';";
+        await using (var cmd = new MySqlCommand(dropUserCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Aplicar cambios
+        var flushCommand = "FLUSH PRIVILEGES;";
+        await using (var cmd = new MySqlCommand(flushCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        return true;
+    }
+
+    private async Task<bool> DeleteSqlServerDatabaseAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminSqlServerConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return false;
+        }
+
+        await using var connection = new SqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+
+        // Poner la base de datos en modo SINGLE_USER para cerrar todas las conexiones
+        var setSingleUserCommand = $"ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;";
+        try
+        {
+            await using (var cmd = new SqlCommand(setSingleUserCommand, connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+        catch
+        {
+            // Si falla, continuamos de todas formas
+        }
+
+        // Eliminar la base de datos
+        var dropDbCommand = $"DROP DATABASE IF EXISTS [{databaseName}];";
+        await using (var cmd = new SqlCommand(dropDbCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Eliminar el login
+        var dropLoginCommand = $"DROP LOGIN IF EXISTS [{username}];";
+        await using (var cmd = new SqlCommand(dropLoginCommand, connection))
+        {
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        return true;
     }
 }

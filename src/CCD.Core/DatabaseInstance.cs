@@ -1,11 +1,12 @@
-﻿namespace CCD.Core;
+namespace CCD.Core;
 
 public class DatabaseInstance
 {
     public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty; // Valor por defecto
-    public string Engine { get; set; } = string.Empty; // Valor por defecto
-    public string Status { get; set; } = string.Empty; // Valor por defecto
+    public string Name { get; set; } = string.Empty; // Nombre de la base de datos
+    public string Engine { get; set; } = string.Empty; // Motor (postgresql, mysql, sqlserver)
+    public string Status { get; set; } = string.Empty; // Estado (Active, Deleted, etc.)
+    public string DbUsername { get; set; } = string.Empty; // Usuario de la base de datos
     
     // Relación con el Usuario
     public Guid UserId { get; set; }
