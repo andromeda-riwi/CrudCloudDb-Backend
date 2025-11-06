@@ -1,4 +1,4 @@
-﻿// --- Imports necesarios para el controlador ---
+﻿﻿// --- Imports necesarios para el controlador ---
 using CCD.Api.Dtos;
 using CCD.Core;
 using CCD.Core.Interfaces;
@@ -23,6 +23,9 @@ public class AuthController : ControllerBase
     {
         var userToCreate = new User
         {
+            Name = request.Name,
+            LastName = request.LastName,
+            UserName = request.UserName,
             Email = request.Email
         };
 
@@ -30,7 +33,7 @@ public class AuthController : ControllerBase
 
         if (createdUser == null)
         {
-            return BadRequest("El correo electrónico ya está en uso.");
+            return BadRequest("El correo electrónico o nombre de usuario ya está en uso.");
         }
 
         return Ok(new { message = "Usuario registrado exitosamente." });
@@ -43,20 +46,38 @@ public class AuthController : ControllerBase
     [HttpPost("login")] // Ruta: POST /api/auth/login
     public async Task<IActionResult> Login(UserLoginDto request)
     {
-        // Llama al método Login del repositorio, que hace todo el trabajo pesado.
-        var token = await _authRepo.Login(request.Email, request.Password);
+        // Determinar si se está usando email o username
+        string identifier = !string.IsNullOrEmpty(request.Email) ? request.Email : request.UserName ?? "";
+        string loginType = !string.IsNullOrEmpty(request.Email) ? "email" : "username";
+        
+        Console.WriteLine($"[LOGIN] Intento de login con {loginType}: {identifier}");
+        
+        // Validar que al menos uno esté presente
+        if (string.IsNullOrEmpty(identifier))
+        {
+            return BadRequest(new { message = "Debes proporcionar un email o nombre de usuario." });
+        }
+        
+        // Llama al método Login del repositorio
+        var token = await _authRepo.Login(identifier, request.Password, loginType == "email");
 
         // Si el repositorio devuelve null, significa que las credenciales son inválidas.
         if (token == null)
         {
-            // Devolvemos un 401 Unauthorized, que es el código de estado correcto
-            // para un intento de login fallido.
-            return Unauthorized("Credenciales inválidas.");
+            Console.WriteLine($"[LOGIN] Login fallido para: {identifier}");
+            return Unauthorized(new { message = "Credenciales inválidas." });
         }
 
-        // Si el login es exitoso, devolvemos un 200 OK con el token JWT.
-        // El frontend guardará este token para usarlo en futuras peticiones.
+        Console.WriteLine($"[LOGIN] Login exitoso para: {identifier}");
         return Ok(new { token });
+    }
+    
+    // --- ENDPOINT TEMPORAL DE DEBUG (ELIMINAR EN PRODUCCIÓN) ---
+    [HttpGet("debug/user/{email}")]
+    public async Task<IActionResult> DebugUser(string email)
+    {
+        var exists = await _authRepo.UserExists(email);
+        return Ok(new { exists, email });
     }
     // ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲ ▲▲▲
 }

@@ -21,8 +21,9 @@ builder.Services.AddCors(options =>
                       {
                           // PERMITE QUE TU FRONTEND SE COMUNIQUE CON LA API
                           // Si tu frontend corre en otro puerto local, añádelo aquí
-                          policy.WithOrigins("http://localhost:8080", 
-                                             "https://voyager.andrescortes.dev")
+                          policy.WithOrigins("http://localhost:5173",
+                                             "http://localhost:8080", 
+                                             "https://andromeda.andrescortes.dev")
                                 .AllowAnyHeader()
                                 .AllowAnyMethod();
                       });
@@ -42,26 +43,26 @@ builder.Services.AddControllers();
 
 // 5. Configuración de Swagger para la documentación de la API
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+builder.Services.AddSwaggerGen(options =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo 
+    options.SwaggerDoc("v1", new OpenApiInfo 
     { 
         Title = "CCD.Api", 
         Version = "v1" 
     });
     
-    // Configuración de seguridad JWT en Swagger
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    // Configurar Swagger para usar JWT
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header usando el esquema Bearer. Ingresa solo el token (sin 'Bearer').",
         Name = "Authorization",
-        In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT"
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Ingresa el token JWT en este formato: Bearer {tu token}"
     });
-    
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme

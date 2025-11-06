@@ -1,4 +1,4 @@
-﻿using CCD.Core;
+﻿﻿using CCD.Core;
 
 namespace CCD.Core.Interfaces;
 
@@ -10,7 +10,9 @@ public interface IAuthRepository
 
     // El '?' después de string indica que el método puede devolver un token o nulo
     // si el login falla.
-    Task<string?> Login(string email, string password);
+    // identifier: puede ser email o username
+    // isEmail: true si identifier es un email, false si es un username
+    Task<string?> Login(string identifier, string password, bool isEmail = true);
 
     Task<bool> UserExists(string email);
 }

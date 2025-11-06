@@ -1,13 +1,12 @@
-﻿// --- Imports necesarios ---
+// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
-using CCD.Core.Interfaces;
+using CCD.Core; // Para usar la entidad DatabaseInstance
+using CCD.Core.Interfaces; // Para usar IDatabaseProvisioner
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
-namespace CCD.Api.Controllers;
 
 // [Authorize] asegura que solo los usuarios con un token JWT válido pueden acceder a estos endpoints.
 [Authorize]
@@ -16,6 +15,7 @@ namespace CCD.Api.Controllers;
 public class DatabasesController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
+    // Servicio que crea bases de datos reales en múltiples motores (PostgreSQL, MongoDB, etc.)
     private readonly IDatabaseProvisioner _provisioner;
 
     // Inyectamos el DbContext y el servicio de aprovisionamiento
@@ -55,6 +55,46 @@ public class DatabasesController : ControllerBase
         return Ok(databases);
     }
 
+    // --- ENDPOINT PARA OBTENER ESTADÍSTICAS DEL DASHBOARD ---
+    // Responde a peticiones GET en /api/databases/stats
+    [HttpGet("stats")]
+    public async Task<IActionResult> GetDashboardStats()
+    {
+        // 1. Obtenemos el ID del usuario del token.
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdString == null)
+        {
+            return Unauthorized();
+        }
+        var userId = Guid.Parse(userIdString);
+
+        // 2. Obtener todas las bases de datos del usuario
+        var databases = await _context.DatabaseInstances
+            .Where(db => db.UserId == userId)
+            .ToListAsync();
+
+        // 3. Calcular estadísticas por motor
+        var databasesByEngine = databases
+            .GroupBy(db => db.Engine)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // 4. Obtener plan del usuario (por ahora hardcoded a "Básico")
+        var currentPlan = "Básico";
+        var maxDatabases = 10; // Límite del plan básico
+        var monthlyPrice = 0; // Plan gratuito
+
+        // 5. Retornar estadísticas
+        return Ok(new
+        {
+            totalDatabases = databases.Count,
+            databasesByEngine = databasesByEngine,
+            currentPlan = currentPlan,
+            maxDatabases = maxDatabases,
+            monthlyPrice = monthlyPrice,
+            nextBillingDate = (string?)null
+        });
+    }
+
     // --- ENDPOINT PARA CREAR UNA NUEVA BASE DE DATOS ---
     // Responde a peticiones POST en /api/databases
     [HttpPost]
@@ -84,32 +124,41 @@ public class DatabasesController : ControllerBase
         // --- FIN DE LA LÓGICA DE CUOTAS ---
 
         // --- LÓGICA DE APROVISIONAMIENTO ---
+        // Aquí es donde realmente creamos la base de datos en el motor solicitado (PostgreSQL, MongoDB, etc.)
         try
         {
-            // 1. Llamar al servicio de aprovisionamiento
+            // PASO 1: Llamar al servicio que crea la base de datos real
+            // Este servicio se conecta al motor de base de datos como administrador y:
+            // - Para PostgreSQL: Crea usuario y base de datos con permisos aislados
+            // - Para MongoDB: Crea base de datos, usuario con roles readWrite y dbAdmin
+            // - Genera credenciales seguras (usuario, contraseña) automáticamente
             var connectionDetails = await _provisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
+            // Si algo salió mal y no obtuvimos las credenciales, devolvemos error 500
             if (connectionDetails == null)
             {
-                return StatusCode(500, new { message = "Hubo un error al crear la base de datos. El servicio devolvió null." });
+                return StatusCode(500, new { message = "Error inesperado al crear la base de datos." });
             }
 
-            // 2. Crear la nueva entidad para guardarla en nuestra DB de gestión
-            var newDbInstance = new Core.DatabaseInstance
+            // PASO 2: Guardar el registro en nuestra base de datos de gestión
+            // Esto es para que el usuario pueda ver sus bases de datos en el dashboard
+            var newDbInstance = new DatabaseInstance
             {
-                Name = connectionDetails.DatabaseName,
-                Engine = createDto.Engine,
-                Status = "Active",
-                UserId = userId
+                Name = connectionDetails.DatabaseName,  // Nombre generado automáticamente
+                Engine = createDto.Engine,              // Motor solicitado (PostgreSQL, MySQL, etc.)
+                Status = "Active",                      // Estado inicial: activa
+                UserId = userId                         // Asociar al usuario actual
             };
 
-            // 3. Guardar el registro en nuestra base de datos
+            // Agregamos la nueva instancia a la base de datos y guardamos los cambios
             await _context.DatabaseInstances.AddAsync(newDbInstance);
             await _context.SaveChangesAsync();
 
-            // 4. TODO: Enviar correo con las credenciales (connectionDetails)
+            // PASO 3: TODO - Enviar correo electrónico con las credenciales
+            // connectionDetails contiene: Host, Port, DatabaseName, Username, Password
+            // Aquí deberías integrar un servicio de email (SendGrid, SMTP, etc.)
 
-            // 5. Devolver la información de la nueva base de datos creada
+            // PASO 4: Devolver la respuesta exitosa con código 201 Created
             var responseDto = new DatabaseResponseDto
             {
                 Id = newDbInstance.Id,
@@ -118,16 +167,21 @@ public class DatabasesController : ControllerBase
                 Status = newDbInstance.Status
             };
 
+            // CreatedAtAction devuelve 201 y la URL donde se puede consultar el recurso creado
             return CreatedAtAction(nameof(GetDatabasesForUser), new { id = responseDto.Id }, responseDto);
         }
-        catch (NotImplementedException ex)
+        catch (NotImplementedException)
         {
             return BadRequest(new { message = $"El motor de base de datos '{createDto.Engine}' no es soportado actualmente." });
         }
         catch (Exception ex)
         {
-            // Log del error (en producción usar ILogger)
-            return StatusCode(500, new { message = "Hubo un error al crear la base de datos en el servidor PostgreSQL.", error = ex.Message });
+            // Si ocurre cualquier error (conexión, permisos, etc.), lo capturamos aquí
+            // TODO: En producción, enviar este error a un sistema de logging o webhook
+            return StatusCode(500, new { 
+                message = "No se pudo crear la base de datos.", 
+                detail = ex.Message 
+            });
         }
     }
 
