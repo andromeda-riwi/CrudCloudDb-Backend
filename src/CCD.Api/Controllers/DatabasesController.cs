@@ -8,21 +8,30 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-// [Authorize] asegura que solo los usuarios con un token JWT válido pueden acceder a estos endpoints.
 [Authorize]
 [ApiController]
 [Route("api/[controller]")] // Ruta base: /api/databases
 public class DatabasesController : ControllerBase
 {
+    private readonly IConfiguration _config;
     private readonly ApplicationDbContext _context;
-    // Servicio que crea bases de datos reales en PostgreSQL
-    private readonly IDatabaseProvisioner _provisioner;
+    private readonly IDatabaseProvisioner _databaseProvisioner;
+    private readonly IEmailService _emailService;
+    private readonly ILogger<DatabasesController> _logger;
 
     // Inyectamos el DbContext para interactuar con nuestra base de datos de gestión.
-    public DatabasesController(ApplicationDbContext context, IDatabaseProvisioner provisioner)
+    public DatabasesController(
+        IConfiguration config, 
+        ApplicationDbContext context, 
+        IDatabaseProvisioner databaseProvisioner,
+        IEmailService emailService,
+        ILogger<DatabasesController> logger)
     {
+        _config = config;
         _context = context;
-        _provisioner = provisioner;
+        _databaseProvisioner = databaseProvisioner;
+        _emailService = emailService;
+        _logger = logger;
     }
 
     // --- ENDPOINT PARA LISTAR BASES DE DATOS ---
@@ -133,11 +142,19 @@ public class DatabasesController : ControllerBase
             // Este servicio se conecta a PostgreSQL como superusuario y ejecuta:
             // - CREATE USER con una contraseña segura generada automáticamente
             // - CREATE DATABASE asignando el usuario como dueño
-            var connectionDetails = await _provisioner.CreateDatabaseAsync(createDto.Engine, userId);
+            var connectionDetails = await _databaseProvisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
             if (connectionDetails == null)
             {
                 return StatusCode(500, new { message = "Error inesperado al crear la base de datos." });
+            }
+
+            // Validar que los campos obligatorios no sean nulos
+            if (string.IsNullOrEmpty(connectionDetails.DatabaseName) || 
+                string.IsNullOrEmpty(createDto.Engine) || 
+                string.IsNullOrEmpty(connectionDetails.Username))
+            {
+                return StatusCode(500, new { message = "Error: No se pudieron generar todas las credenciales necesarias." });
             }
 
             // PASO 2: Guardar el registro en nuestra base de datos de gestión
@@ -148,7 +165,7 @@ public class DatabasesController : ControllerBase
                 Engine = createDto.Engine,              // Motor solicitado (PostgreSQL, MySQL, etc.)
                 Status = "Active",                      // Estado inicial: activa
                 DbUsername = connectionDetails.Username, // Usuario de la base de datos
-                UserId = userId,                         // Asociar al usuario actual
+                UserId = userId,                        // Asociar al usuario actual
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -156,26 +173,56 @@ public class DatabasesController : ControllerBase
             await _context.DatabaseInstances.AddAsync(newDbInstance);
             await _context.SaveChangesAsync();
 
-            // PASO 3: TODO - Enviar correo electrónico con las credenciales
-            // connectionDetails contiene: Host, Port, DatabaseName, Username, Password
-            // Aquí deberías integrar un servicio de email (SendGrid, SMTP, etc.)
+            // PASO 3: Enviar correo electrónico con las credenciales
+            try
+            {
+                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+                if (!string.IsNullOrEmpty(userEmail))
+                {
+                    await _emailService.SendDatabaseCredentialsAsync(
+                        userEmail,
+                        User.Identity?.Name ?? "Usuario",
+                        connectionDetails);
+                    
+                    _logger.LogInformation($"Correo de credenciales enviado a {userEmail}");
+                }
+                else
+                {
+                    _logger.LogWarning("No se pudo obtener el correo del usuario para enviar las credenciales");
+                }
+            }
+            catch (Exception ex)
+            {
+                // No fallar la operación si el correo no se puede enviar, solo registrar el error
+                _logger.LogError(ex, "Error al enviar correo con credenciales");
+            }
 
-            // PASO 4: Devolver la respuesta exitosa con código 201 Created
+            // Validar que las credenciales no sean nulas
+            if (connectionDetails.Host == null || connectionDetails.Username == null || connectionDetails.Password == null)
+            {
+                _logger.LogError("No se pudieron obtener todas las credenciales de conexión");
+                return StatusCode(500, new { message = "Error al generar las credenciales de conexión." });
+            }
+
             var responseDto = new DatabaseResponseDto
             {
                 Id = newDbInstance.Id,
-                Name = newDbInstance.Name,
-                Engine = newDbInstance.Engine,
-                Status = newDbInstance.Status
+                Name = newDbInstance.Name ?? "",
+                Engine = newDbInstance.Engine ?? "",
+                Status = newDbInstance.Status ?? "Active",
+                CreatedAt = newDbInstance.CreatedAt,
+                // Incluir credenciales solo para la respuesta de creación
+                Host = connectionDetails.Host,
+                Port = connectionDetails.Port,
+                Username = connectionDetails.Username,
+                Password = connectionDetails.Password
             };
-
             // CreatedAtAction devuelve 201 y la URL donde se puede consultar el recurso creado
             return CreatedAtAction(nameof(GetDatabasesForUser), new { id = responseDto.Id }, responseDto);
         }
         catch (Exception ex)
         {
             // Si ocurre cualquier error (conexión, permisos, etc.), lo capturamos aquí
-            // TODO: En producción, enviar este error a un sistema de logging o webhook
             return StatusCode(500, new { 
                 message = "No se pudo crear la base de datos.", 
                 detail = ex.Message 
@@ -210,7 +257,7 @@ public class DatabasesController : ControllerBase
         // Llamar al servicio para eliminar la base de datos y el usuario del servidor real
         try
         {
-            var deleted = await _provisioner.DeleteDatabaseAsync(
+            var deleted = await _databaseProvisioner.DeleteDatabaseAsync(
                 dbInstance.Engine, 
                 dbInstance.Name, 
                 dbInstance.DbUsername

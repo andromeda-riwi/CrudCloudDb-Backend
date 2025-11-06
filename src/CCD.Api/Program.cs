@@ -21,22 +21,23 @@ builder.Services.AddCors(options =>
                           // PERMITE QUE TU FRONTEND SE COMUNIQUE CON LA API
                           // Si tu frontend corre en otro puerto local, añádelo aquí
                           policy.WithOrigins("http://localhost:5173",
-                                             "http://localhost:8080", 
-                                             "https://andromeda.andrescortes.dev")
+                                           "http://localhost:8080")
                                 .AllowAnyHeader()
                                 .AllowAnyMethod();
                       });
 });
 
-// 2. Configuración de la Base de Datos (Entity Framework Core)
+// 2. Configuración de la base de datos
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// 3. Configuración del servicio de correo electrónico
+builder.Services.AddScoped<IEmailService, SendGridEmailService>();
 
 // 3. Registro de Servicios y Repositorios (Inyección de Dependencias)
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IDatabaseProvisioner, DatabaseProvisioner>();
 // A medida que crees más servicios (pagos, correos), los registrarás aquí.
-
 // 4. Configuración de los Controladores de la API
 builder.Services.AddControllers();
 

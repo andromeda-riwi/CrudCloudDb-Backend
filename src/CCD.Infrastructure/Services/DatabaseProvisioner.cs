@@ -10,7 +10,6 @@ namespace CCD.Infrastructure.Services;
 public class DatabaseProvisioner : IDatabaseProvisioner
 {
     private readonly IConfiguration _config;
-
     public DatabaseProvisioner(IConfiguration config)
     {
         _config = config;
@@ -38,7 +37,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         }
     }
 
-    private async Task<DatabaseConnectionDetails> CreatePostgreSqlDatabaseAsync(Guid userId)
+    public async Task<DatabaseConnectionDetails> CreatePostgreSqlDatabaseAsync(Guid userId)
     {
         // 1. Obtener la cadena de conexión del SUPERUSUARIO desde appsettings.json
         var adminConnectionString = _config.GetConnectionString("AdminPostgresConnection");
@@ -86,25 +85,41 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         await using var dbConnection = new NpgsqlConnection(dbConnectionString);
         await dbConnection.OpenAsync();
 
-        // Dar permisos completos sobre el schema public pero sin DROP DATABASE
-        var grantSchemaCommand = "GRANT ALL PRIVILEGES ON SCHEMA public TO \"" + dbUser + "\";";
+        // Configurar permisos seguros para el usuario
+        var grantSchemaCommand = @$"
+            -- Permisos básicos sobre tablas existentes
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ""{dbUser}"";
+            
+            -- Permisos sobre secuencias (para campos autoincrementales)
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ""{dbUser}"";
+            
+            -- Permisos por defecto para tablas futuras
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public 
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ""{dbUser}"";
+            
+            -- Permisos por defecto para secuencias futuras
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public 
+            GRANT USAGE, SELECT ON SEQUENCES TO ""{dbUser}"";";
+            
+        // Aplicar permisos
         await using (var cmd = new NpgsqlCommand(grantSchemaCommand, dbConnection))
         {
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // 6. Devolver los detalles de la conexión
+        // 5. Devolver los detalles de la conexión
         return new DatabaseConnectionDetails
         {
             Host = connection.Host,
             Port = connection.Port,
             DatabaseName = dbName,
             Username = dbUser,
-            Password = dbPassword
+            Password = dbPassword,
+            Engine = "PostgreSQL"
         };
     }
 
-    private async Task<DatabaseConnectionDetails> CreateMySqlDatabaseAsync(Guid userId)
+    public async Task<DatabaseConnectionDetails> CreateMySqlDatabaseAsync(Guid userId)
     {
         // 1. Obtener la cadena de conexión del SUPERUSUARIO desde appsettings.json
         var adminConnectionString = _config.GetConnectionString("AdminMySqlConnection");
@@ -163,11 +178,12 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Port = connection.ServerVersion != null ? 3306 : 3306, // Puerto por defecto MySQL
             DatabaseName = dbName,
             Username = dbUser,
-            Password = dbPassword
+            Password = dbPassword,
+            Engine = "MySQL"
         };
     }
 
-    private string GenerateSecurePassword()
+    public string GenerateSecurePassword()
     {
         // Implementación mejorada para generar contraseñas seguras
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
@@ -198,7 +214,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         return new string(password);
     }
 
-    private async Task<DatabaseConnectionDetails> CreateSqlServerDatabaseAsync(Guid userId)
+    public async Task<DatabaseConnectionDetails> CreateSqlServerDatabaseAsync(Guid userId)
     {
         // 1. Obtener la cadena de conexión del SUPERUSUARIO desde appsettings.json
         var adminConnectionString = _config.GetConnectionString("AdminSqlServerConnection");
@@ -279,7 +295,8 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Port = 1433, // Puerto por defecto SQL Server
             DatabaseName = dbName,
             Username = dbUser,
-            Password = dbPassword
+            Password = dbPassword,
+            Engine = "SQL Server"
         };
     }
 
@@ -313,7 +330,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         }
     }
 
-    private async Task<bool> DeletePostgreSqlDatabaseAsync(string databaseName, string username)
+    public async Task<bool> DeletePostgreSqlDatabaseAsync(string databaseName, string username)
     {
         var adminConnectionString = _config.GetConnectionString("AdminPostgresConnection");
         if (string.IsNullOrEmpty(adminConnectionString))
@@ -353,7 +370,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         return true;
     }
 
-    private async Task<bool> DeleteMySqlDatabaseAsync(string databaseName, string username)
+    public async Task<bool> DeleteMySqlDatabaseAsync(string databaseName, string username)
     {
         var adminConnectionString = _config.GetConnectionString("AdminMySqlConnection");
         if (string.IsNullOrEmpty(adminConnectionString))
@@ -418,7 +435,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         return true;
     }
 
-    private async Task<bool> DeleteSqlServerDatabaseAsync(string databaseName, string username)
+    public async Task<bool> DeleteSqlServerDatabaseAsync(string databaseName, string username)
     {
         var adminConnectionString = _config.GetConnectionString("AdminSqlServerConnection");
         if (string.IsNullOrEmpty(adminConnectionString))
