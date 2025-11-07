@@ -16,6 +16,7 @@ namespace CCD.Infrastructure.Services
         private readonly string _fromName;
         private readonly string _dashboardUrl;
         private readonly ILogger<SendGridEmailService> _logger;
+        private readonly bool _isConfigured;
 
         public SendGridEmailService(IConfiguration config, ILogger<SendGridEmailService> logger)
         {
@@ -27,18 +28,27 @@ namespace CCD.Infrastructure.Services
 
             if (string.IsNullOrEmpty(_apiKey))
             {
-                _logger.LogError("ERROR CRÍTICO: No se encontró la API Key de SendGrid");
-                throw new ArgumentNullException("SendGrid:ApiKey", "La API Key de SendGrid es requerida");
+                _isConfigured = false;
+                _logger.LogWarning("⚠️ Servicio de correo DESHABILITADO. Falta 'SendGrid:ApiKey'. Los correos no se enviarán.");
             }
-
-            _logger.LogInformation("✅ Servicio de correo inicializado correctamente");
-            _logger.LogInformation($"📧 Remitente: {_fromName} <{_fromEmail}>");
+            else
+            {
+                _isConfigured = true;
+                _logger.LogInformation("✅ Servicio de correo inicializado correctamente");
+                _logger.LogInformation($"📧 Remitente: {_fromName} <{_fromEmail}>");
+            }
         }
 
         public async Task SendDatabaseCredentialsAsync(string toEmail, string userName, DatabaseConnectionDetails dbDetails)
         {
             try
             {
+                if (!_isConfigured)
+                {
+                    _logger.LogWarning("📪 Envío de credenciales omitido: servicio de correo no configurado. Destinatario: {Email}", toEmail);
+                    return;
+                }
+
                 _logger.LogInformation($"📨 Preparando envío de credenciales a: {toEmail}");
 
                 var client = new SendGridClient(_apiKey);
@@ -152,6 +162,12 @@ Equipo ApexDb
         {
             try
             {
+                if (!_isConfigured)
+                {
+                    _logger.LogWarning("📪 Envío de bienvenida omitido: servicio de correo no configurado. Destinatario: {Email}", toEmail);
+                    return;
+                }
+
                 _logger.LogInformation($"📨 Preparando envío de bienvenida a: {toEmail}");
 
                 var client = new SendGridClient(_apiKey);
