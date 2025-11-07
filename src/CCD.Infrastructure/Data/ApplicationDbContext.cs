@@ -53,20 +53,13 @@ public class ApplicationDbContext : DbContext
         });
         
         modelBuilder.Entity<Plan>()
-<<<<<<< HEAD
+
             .HasMany(p => p.Users)      
             .WithOne(u => u.Plan)       
             .HasForeignKey(u => u.PlanId) 
             .IsRequired();              
         
-=======
-            .HasMany(p => p.Users)
-            .WithOne(u => u.Plan)
-            .HasForeignKey(u => u.PlanId)
-            .IsRequired();
 
-        // Relación Uno-a-Muchos: Un Usuario tiene muchas DatabaseInstances
->>>>>>> 8f2f500fc835ffd00a9f47e740f38be94163a140
         modelBuilder.Entity<User>()
             .HasMany(u => u.DatabaseInstances)
             .WithOne(d => d.User)
