@@ -11,7 +11,7 @@ namespace CCD.Infrastructure.Services
 {
     public class SendGridEmailService : IEmailService
     {
-        private readonly string _apiKey;
+        private readonly string? _apiKey;
         private readonly string _fromEmail;
         private readonly string _fromName;
         private readonly string _dashboardUrl;
@@ -51,7 +51,7 @@ namespace CCD.Infrastructure.Services
 
                 _logger.LogInformation($"📨 Preparando envío de credenciales a: {toEmail}");
 
-                var client = new SendGridClient(_apiKey);
+                var client = new SendGridClient(_apiKey!);
                 var from = new EmailAddress(_fromEmail, _fromName);
                 var to = new EmailAddress(toEmail, userName);
                 var subject = "Tus credenciales de base de datos";
@@ -170,7 +170,7 @@ Equipo ApexDb
 
                 _logger.LogInformation($"📨 Preparando envío de bienvenida a: {toEmail}");
 
-                var client = new SendGridClient(_apiKey);
+                var client = new SendGridClient(_apiKey!);
                 var from = new EmailAddress(_fromEmail, _fromName);
                 var to = new EmailAddress(toEmail, userName);
                 var subject = "¡Bienvenido a CCD Platform!";
