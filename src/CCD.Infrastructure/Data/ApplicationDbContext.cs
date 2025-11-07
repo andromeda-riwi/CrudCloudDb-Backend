@@ -1,4 +1,4 @@
-﻿using CCD.Core;
+using CCD.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration; // <-- Importante añadir esto
 using System.IO; // <-- Importante añadir esto
@@ -52,7 +52,6 @@ public class ApplicationDbContext : DbContext
             // Crea un índice único en la columna 'Email' para asegurar que no haya correos duplicados
             entity.HasIndex(u => u.Email).IsUnique();
             entity.Property(u => u.Email).IsRequired();
-
             entity.Property(u => u.PasswordHash).IsRequired();
             entity.Property(u => u.PasswordSalt).IsRequired();
         });
@@ -64,16 +63,17 @@ public class ApplicationDbContext : DbContext
             entity.HasKey(d => d.Id);
             entity.Property(d => d.Name).IsRequired();
             entity.Property(d => d.Engine).IsRequired();
+            entity.Property(d => d.TimeZoneId).IsRequired();
         });
 
         // --- DEFINICIÓN DE RELACIONES ---
 
         // Relación Uno-a-Muchos: Un Plan tiene muchos Usuarios
         modelBuilder.Entity<Plan>()
-            .HasMany(p => p.Users)      // Un Plan tiene una colección de Usuarios
-            .WithOne(u => u.Plan)       // Cada Usuario tiene una sola propiedad de navegación 'Plan'
-            .HasForeignKey(u => u.PlanId) // La clave foránea en la tabla 'Users' es 'PlanId'
-            .IsRequired();              // Un usuario debe tener un plan
+            .HasMany(p => p.Users)
+            .WithOne(u => u.Plan)
+            .HasForeignKey(u => u.PlanId)
+            .IsRequired();
 
         // Relación Uno-a-Muchos: Un Usuario tiene muchas DatabaseInstances
         modelBuilder.Entity<User>()
