@@ -27,15 +27,23 @@ git clone <url-del-repo>
 cd CrudCloudDb-Backend
 ```
 
-### 2. Configurar las cadenas de conexión
+### 2. Configurar las cadenas de conexión y servicios
 
-Abre el archivo `src/CCD.Api/appsettings.json` y **reemplaza** la contraseña del usuario `postgres`:
+Abre el archivo `src/CCD.Api/appsettings.json` y **reemplaza** la contraseña del usuario `postgres`. También define las claves para el servicio de correo y la URL del panel:
 
 ```json
 {
   "ConnectionStrings": {
     "DefaultConnection": "Server=49.12.100.202;Port=5432;Database=ccd_dev_db;User Id=root;Password=xbI4PLOvlMwRwHn7SdZXHivFOZwc98",
     "AdminPostgresConnection": "Host=49.12.100.202;Port=5432;Database=postgres;Username=postgres;Password=TU_PASSWORD_REAL_AQUI"
+  },
+  "SendGrid": {
+    "ApiKey": "TU_API_KEY_AQUI",
+    "FromEmail": "no-reply@tu-dominio.com",
+    "FromName": "CCD Platform"
+  },
+  "App": {
+    "DashboardUrl": "https://tu-dominio.com/dashboard"
   }
 }
 ```
@@ -65,6 +73,8 @@ dotnet run
 El backend estará disponible en:
 - **Swagger UI**: `https://localhost:5001` o `http://localhost:5000`
 - **API**: `https://localhost:5001/api`
+
+> ℹ️ Puedes usar variables de entorno o secretos de usuario (`dotnet user-secrets`) para evitar almacenar valores sensibles directamente en el repositorio.
 
 ## 🔐 Endpoints Principales
 
@@ -172,9 +182,38 @@ ALTER USER postgres WITH SUPERUSER;
 
 **Solución**: El sistema genera nombres aleatorios, pero si persiste, verifica colisiones manualmente.
 
+## ✉️ Notificaciones por Correo (SendGrid)
+
+El servicio `SendGridEmailService` en `src/CCD.Infrastructure/Services/SendGridEmailService.cs` envía correos de bienvenida y credenciales utilizando la configuración definida en `appsettings.json`. Asegúrate de:
+
+- **`SendGrid:ApiKey`**: API Key activa de tu cuenta SendGrid.
+- **`SendGrid:FromEmail` / `SendGrid:FromName`**: Remitente visible en los correos.
+- **`App:DashboardUrl`**: URL que aparece en los mensajes enviados a los usuarios.
+
+Si no configuras la API Key, el servicio lanzará una excepción en tiempo de ejecución y el backend no iniciará.
+
+## 🐳 Despliegue con Docker Compose
+
+Desde la raíz del proyecto (`CrudCloudDb-Backend/`):
+
+```bash
+docker compose build            # Construye la imagen de la API
+docker compose up -d --build    # Levanta/redpliega los contenedores
+docker compose ps               # Verifica el estado
+```
+
+Para aplicar cambios de configuración en producción:
+
+```bash
+docker compose down --remove-orphans
+docker compose up -d --build --force-recreate
+```
+
+El contenedor principal expone la API en el puerto `8082` (`http://localhost:8082`). Ajusta los puertos o variables de entorno en `docker-compose.yml` según tus necesidades.
+
 ## 📦 Próximos Pasos (TODOs)
 
-- [ ] Integrar servicio de correo electrónico (SendGrid, SMTP)
+- [x] Integrar servicio de correo electrónico (SendGrid)
 - [ ] Implementar webhooks para notificaciones
 - [ ] Agregar soporte para MySQL, MongoDB, SQL Server
 - [ ] Integrar Mercado Pago para planes pagos
