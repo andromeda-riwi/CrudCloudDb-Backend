@@ -2,27 +2,37 @@
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core; // Para usar la entidad DatabaseInstance
-using CCD.Core.Interfaces; // Para usar IDatabaseProvisioner
+using CCD.Core.Interfaces; // Para usar IDatabaseProvisioner e IEmailService
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TimeZoneConverter;
 
-// [Authorize] asegura que solo los usuarios con un token JWT válido pueden acceder a estos endpoints.
 [Authorize]
 [ApiController]
 [Route("api/[controller]")] // Ruta base: /api/databases
 public class DatabasesController : ControllerBase
 {
+    private readonly IConfiguration _config;
     private readonly ApplicationDbContext _context;
-    // Servicio que crea bases de datos reales en PostgreSQL
-    private readonly IDatabaseProvisioner _provisioner;
+    private readonly IDatabaseProvisioner _databaseProvisioner;
+    private readonly IEmailService _emailService;
+    private readonly ILogger<DatabasesController> _logger;
 
     // Inyectamos el DbContext para interactuar con nuestra base de datos de gestión.
-    public DatabasesController(ApplicationDbContext context, IDatabaseProvisioner provisioner)
+    public DatabasesController(
+        IConfiguration config,
+        ApplicationDbContext context,
+        IDatabaseProvisioner databaseProvisioner,
+        IEmailService emailService,
+        ILogger<DatabasesController> logger)
     {
+        _config = config;
         _context = context;
-        _provisioner = provisioner;
+        _databaseProvisioner = databaseProvisioner;
+        _emailService = emailService;
+        _logger = logger;
     }
 
     // --- ENDPOINT PARA LISTAR BASES DE DATOS ---
@@ -38,21 +48,45 @@ public class DatabasesController : ControllerBase
         }
         var userId = Guid.Parse(userIdString);
 
-        // 2. Buscamos en la tabla DatabaseInstances todas las entradas que pertenezcan a este usuario.
+        // 2. Buscamos las bases de datos del usuario.
         var databases = await _context.DatabaseInstances
             .Where(db => db.UserId == userId)
-            // 3. Convertimos cada resultado a un DTO para enviar solo la información necesaria al frontend.
-            .Select(db => new DatabaseResponseDto
+            .AsNoTracking()
+            .ToListAsync();
+
+        // 3. Convertimos cada resultado a un DTO aplicando la zona horaria almacenada.
+        var response = databases.Select(db =>
+        {
+            TimeZoneInfo timeZone;
+            try
+            {
+                timeZone = TZConvert.GetTimeZoneInfo(db.TimeZoneId);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                timeZone = TimeZoneInfo.Utc;
+            }
+            catch (InvalidTimeZoneException)
+            {
+                timeZone = TimeZoneInfo.Utc;
+            }
+
+            var createdAtLocal = TimeZoneInfo.ConvertTimeFromUtc(db.CreatedAt, timeZone);
+
+            return new DatabaseResponseDto
             {
                 Id = db.Id,
                 Name = db.Name,
                 Engine = db.Engine,
-                Status = db.Status
-            })
-            .ToListAsync();
+                Status = db.Status,
+                CreatedAt = createdAtLocal,
+                CreatedAtUtc = db.CreatedAt,
+                TimeZoneId = db.TimeZoneId
+            };
+        }).ToList();
 
         // 4. Devolvemos la lista de bases de datos.
-        return Ok(databases);
+        return Ok(response);
     }
 
     // --- ENDPOINT PARA OBTENER ESTADÍSTICAS DEL DASHBOARD ---
@@ -71,6 +105,7 @@ public class DatabasesController : ControllerBase
         // 2. Obtener todas las bases de datos del usuario
         var databases = await _context.DatabaseInstances
             .Where(db => db.UserId == userId)
+            .AsNoTracking()
             .ToListAsync();
 
         // 3. Calcular estadísticas por motor
@@ -108,8 +143,25 @@ public class DatabasesController : ControllerBase
         }
         var userId = Guid.Parse(userIdString);
 
+        TimeZoneInfo userTimeZoneInfo;
+        string normalizedTimeZoneId;
+        try
+        {
+            userTimeZoneInfo = TZConvert.GetTimeZoneInfo(createDto.TimeZoneId);
+            normalizedTimeZoneId = TZConvert.TryWindowsToIana(userTimeZoneInfo.Id, out var ianaId)
+                ? ianaId
+                : userTimeZoneInfo.Id;
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return BadRequest(new { message = $"Zona horaria '{createDto.TimeZoneId}' no es válida." });
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return BadRequest(new { message = $"Zona horaria '{createDto.TimeZoneId}' no es válida." });
+        }
+
         // --- LÓGICA DE VALIDACIÓN DE CUOTAS (Tu Responsabilidad) ---
-        // Asumimos un plan gratuito por ahora.
         const int freePlanLimit = 2;
 
         // Contamos cuántas bases de datos del motor solicitado ya tiene el usuario.
@@ -129,54 +181,92 @@ public class DatabasesController : ControllerBase
         try
         {
             // PASO 1: Llamar al servicio que crea la base de datos real
-            // Este servicio se conecta a PostgreSQL como superusuario y ejecuta:
-            // - CREATE USER con una contraseña segura generada automáticamente
-            // - CREATE DATABASE asignando el usuario como dueño
-            var connectionDetails = await _provisioner.CreateDatabaseAsync(createDto.Engine, userId);
+            var connectionDetails = await _databaseProvisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
             if (connectionDetails == null)
             {
                 return StatusCode(500, new { message = "Error inesperado al crear la base de datos." });
             }
 
+            // Validar que los campos obligatorios no sean nulos
+            if (string.IsNullOrEmpty(connectionDetails.DatabaseName) ||
+                string.IsNullOrEmpty(createDto.Engine) ||
+                string.IsNullOrEmpty(connectionDetails.Username))
+            {
+                return StatusCode(500, new { message = "Error: No se pudieron generar todas las credenciales necesarias." });
+            }
+
             // PASO 2: Guardar el registro en nuestra base de datos de gestión
-            // Esto es para que el usuario pueda ver sus bases de datos en el dashboard
             var newDbInstance = new DatabaseInstance
             {
                 Name = connectionDetails.DatabaseName,  // Nombre generado automáticamente
                 Engine = createDto.Engine,              // Motor solicitado (PostgreSQL, MySQL, etc.)
                 Status = "Active",                      // Estado inicial: activa
                 DbUsername = connectionDetails.Username, // Usuario de la base de datos
-                UserId = userId                         // Asociar al usuario actual
+                UserId = userId,                        // Asociar al usuario actual
+                CreatedAt = DateTime.UtcNow,
+                TimeZoneId = normalizedTimeZoneId
             };
 
-            // Agregamos la nueva instancia a la base de datos y guardamos los cambios
             await _context.DatabaseInstances.AddAsync(newDbInstance);
             await _context.SaveChangesAsync();
 
-            // PASO 3: TODO - Enviar correo electrónico con las credenciales
-            // connectionDetails contiene: Host, Port, DatabaseName, Username, Password
-            // Aquí deberías integrar un servicio de email (SendGrid, SMTP, etc.)
+            // PASO 3: Enviar correo electrónico con las credenciales
+            try
+            {
+                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+                if (!string.IsNullOrEmpty(userEmail))
+                {
+                    await _emailService.SendDatabaseCredentialsAsync(
+                        userEmail,
+                        User.Identity?.Name ?? "Usuario",
+                        connectionDetails);
 
-            // PASO 4: Devolver la respuesta exitosa con código 201 Created
+                    _logger.LogInformation($"Correo de credenciales enviado a {userEmail}");
+                }
+                else
+                {
+                    _logger.LogWarning("No se pudo obtener el correo del usuario para enviar las credenciales");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al enviar correo con credenciales");
+            }
+
+            // Validar que las credenciales no sean nulas
+            if (connectionDetails.Host == null || connectionDetails.Username == null || connectionDetails.Password == null)
+            {
+                _logger.LogError("No se pudieron obtener todas las credenciales de conexión");
+                return StatusCode(500, new { message = "Error al generar las credenciales de conexión." });
+            }
+
+            var createdAtLocal = TimeZoneInfo.ConvertTimeFromUtc(newDbInstance.CreatedAt, userTimeZoneInfo);
+
             var responseDto = new DatabaseResponseDto
             {
                 Id = newDbInstance.Id,
-                Name = newDbInstance.Name,
-                Engine = newDbInstance.Engine,
-                Status = newDbInstance.Status
+                Name = newDbInstance.Name ?? string.Empty,
+                Engine = newDbInstance.Engine ?? string.Empty,
+                Status = newDbInstance.Status ?? "Active",
+                CreatedAt = createdAtLocal,
+                CreatedAtUtc = newDbInstance.CreatedAt,
+                TimeZoneId = newDbInstance.TimeZoneId,
+                // Incluir credenciales solo para la respuesta de creación
+                Host = connectionDetails.Host,
+                Port = connectionDetails.Port,
+                Username = connectionDetails.Username,
+                Password = connectionDetails.Password
             };
 
-            // CreatedAtAction devuelve 201 y la URL donde se puede consultar el recurso creado
             return CreatedAtAction(nameof(GetDatabasesForUser), new { id = responseDto.Id }, responseDto);
         }
         catch (Exception ex)
         {
-            // Si ocurre cualquier error (conexión, permisos, etc.), lo capturamos aquí
-            // TODO: En producción, enviar este error a un sistema de logging o webhook
-            return StatusCode(500, new { 
-                message = "No se pudo crear la base de datos.", 
-                detail = ex.Message 
+            return StatusCode(500, new
+            {
+                message = "No se pudo crear la base de datos.",
+                detail = ex.Message
             });
         }
     }
@@ -208,9 +298,9 @@ public class DatabasesController : ControllerBase
         // Llamar al servicio para eliminar la base de datos y el usuario del servidor real
         try
         {
-            var deleted = await _provisioner.DeleteDatabaseAsync(
-                dbInstance.Engine, 
-                dbInstance.Name, 
+            var deleted = await _databaseProvisioner.DeleteDatabaseAsync(
+                dbInstance.Engine,
+                dbInstance.Name,
                 dbInstance.DbUsername
             );
 
@@ -221,16 +311,16 @@ public class DatabasesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { 
-                message = "Error al eliminar la base de datos del servidor.", 
-                detail = ex.Message 
+            return StatusCode(500, new
+            {
+                message = "Error al eliminar la base de datos del servidor.",
+                detail = ex.Message
             });
         }
 
-        // Eliminar el registro de nuestra base de datos de gestión
         _context.DatabaseInstances.Remove(dbInstance);
         await _context.SaveChangesAsync();
 
-        return NoContent(); // Respuesta estándar para un borrado exitoso.
+        return NoContent();
     }
 }

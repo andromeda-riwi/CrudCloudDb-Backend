@@ -1,4 +1,4 @@
-﻿namespace CCD.Core.Dtos;
+namespace CCD.Core.Dtos;
 
 public class DatabaseConnectionDetails
 {
@@ -7,4 +7,5 @@ public class DatabaseConnectionDetails
     public string? DatabaseName { get; set; }
     public string? Username { get; set; }
     public string? Password { get; set; }
+    public string? Engine { get; set; }
 }

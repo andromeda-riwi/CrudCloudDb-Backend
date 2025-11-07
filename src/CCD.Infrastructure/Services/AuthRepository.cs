@@ -1,4 +1,4 @@
-﻿// --- Imports necesarios para toda la funcionalidad ---
+// --- Imports necesarios para toda la funcionalidad ---
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -8,9 +8,8 @@ using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-
-namespace CCD.Infrastructure.Services;
 
 // Esta clase contiene la implementación real (la "cocina") de la lógica de autenticación.
 // Implementa el contrato definido en IAuthRepository.
@@ -18,11 +17,15 @@ public class AuthRepository : IAuthRepository
 {
     private readonly ApplicationDbContext _context;
     private readonly IConfiguration _config;
+    private readonly IEmailService _emailService;
+    private readonly ILogger<AuthRepository> _logger;
 
-    public AuthRepository(ApplicationDbContext context, IConfiguration config)
+    public AuthRepository(ApplicationDbContext context, IConfiguration config, IEmailService emailService, ILogger<AuthRepository> logger)
     {
         _context = context;
         _config = config;
+        _emailService = emailService;
+        _logger = logger;
     }
 
     // --- LÓGICA DE REGISTRO ---
@@ -56,11 +59,32 @@ public class AuthRepository : IAuthRepository
         Console.WriteLine($"[AuthRepo] Usuario ID generado: {user.Id}");
         Console.WriteLine($"[AuthRepo] PlanId del usuario: {user.PlanId}");
         
-        await _context.Users.AddAsync(user);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.Users.AddAsync(user);
+            await _context.SaveChangesAsync();
 
-        Console.WriteLine($"[AuthRepo] Usuario guardado exitosamente: {user.Email}");
-        return user;
+            Console.WriteLine($"[AuthRepo] Usuario guardado exitosamente: {user.Email}");
+            
+            // Enviar correo de bienvenida
+            try
+            {
+                await _emailService.SendWelcomeEmailAsync(user.Email, user.UserName);
+                _logger.LogInformation($"Correo de bienvenida enviado a {user.Email}");
+            }
+            catch (Exception ex)
+            {
+                // No fallar el registro si el correo no se puede enviar
+                _logger.LogError(ex, $"Error al enviar correo de bienvenida a {user.Email}");
+            }
+            
+            return user;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al registrar usuario");
+            throw; // Relanzar la excepción para manejarla en el controlador
+        }
     }
 
     // --- LÓGICA DE LOGIN ---
