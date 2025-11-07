@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 using System.Security.Cryptography; // <--- Añade esto
 using System.Text;                 // <--- Añade esto
-using Microsoft.Extensions.Primitives; // <--- Añade esto
+using Microsoft.Extensions.Primitives; 
 
 [Route("api/[controller]")]
 [ApiController]
@@ -12,20 +12,20 @@ public class WebhookController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
     private readonly ILogger<WebhookController> _logger;
-    private readonly IConfiguration _configuration; // <-- Inyecta IConfiguration
+    private readonly IConfiguration _configuration; // IConfiguration
 
     public WebhookController(IPaymentService paymentService, ILogger<WebhookController> logger, IConfiguration configuration)
     {
         _paymentService = paymentService;
         _logger = logger;
-        _configuration = configuration; // <-- Guárdalo
+        _configuration = configuration; 
     }
 
     [HttpPost("mercadopago")]
     [AllowAnonymous]
     public async Task<IActionResult> ReceiveMercadoPagoNotification([FromBody] JsonElement body)
     {
-        // --- INICIO DE VALIDACIÓN DE FIRMA ---
+        // --- Init of firm validation ---
         if (!Request.Headers.TryGetValue("X-Signature", out StringValues signatureHeader))
         {
             _logger.LogWarning("Webhook de Mercado Pago recibido sin la cabecera X-Signature.");
@@ -39,7 +39,7 @@ public class WebhookController : ControllerBase
              return StatusCode(500, "Configuración del servidor incompleta.");
         }
 
-        // La firma viene en el formato ts=<timestamp>,v1=<hash>
+        // FIRM in format ts=<timestamp>,v1=<hash>
         var parts = signatureHeader.ToString().Split(',');
         var timestamp = parts.FirstOrDefault(p => p.StartsWith("ts="))?.Substring(3);
         var hash = parts.FirstOrDefault(p => p.StartsWith("v1="))?.Substring(3);
@@ -49,7 +49,7 @@ public class WebhookController : ControllerBase
             return BadRequest("Formato de firma inválido.");
         }
         
-        // Recreamos el manifiesto que Mercado Pago firmó
+        // manifest of the mercado pago payment
         var requestTimestamp = Request.Headers["X-Request-Timestamp"].ToString();
         var manifest = $"id:{body.GetProperty("data").GetProperty("id").GetString()};request-id:{Request.Headers["X-Request-Id"]};ts:{timestamp};";
 
@@ -62,7 +62,7 @@ public class WebhookController : ControllerBase
             _logger.LogWarning("¡Firma de Webhook inválida! Se recibió una notificación potencialmente fraudulenta.");
             return Unauthorized("Firma inválida.");
         }
-        // --- FIN DE VALIDACIÓN DE FIRMA ---
+        // -end validation of the FIRM ---
 
         _logger.LogInformation("Notificación de Mercado Pago recibida y validada: {Body}", body.ToString());
 
