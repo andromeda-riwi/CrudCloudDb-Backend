@@ -2,14 +2,107 @@
 
 Plataforma web para gestión automatizada de bases de datos en la nube, similar a Clever Cloud.
 
+## 🧭 Descripción General
+
+El presente proyecto desarrolla una plataforma web tipo Clever Cloud enfocada en la gestión automatizada de bases de datos en la nube. A través de esta solución, las personas usuarias pueden crear, administrar, escalar y eliminar instancias de múltiples motores de base de datos (PostgreSQL, MySQL, MongoDB, SQL Server, Redis y Cassandra) desde un panel centralizado, intuitivo y seguro.
+
+La arquitectura se compone de un frontend en Vue.js y un backend en ASP.NET Core Web API comunicados mediante servicios REST y protegidos con autenticación JWT. Al registrarse, cualquier usuario obtiene el plan gratuito (hasta dos bases de datos por motor) y puede ampliar su capacidad mediante planes pagos gestionados con Mercado Pago. Cada plan define cuotas diferenciadas y el sistema ajusta permisos y recursos disponibles.
+
 ## 🚀 Descripción
 
 Este backend permite a los usuarios:
-- Registrarse y autenticarse con JWT
-- Crear bases de datos PostgreSQL automáticamente
-- Gestionar múltiples instancias de bases de datos
-- Controlar cuotas por plan (Gratuito, Intermedio, Avanzado)
-- Recibir credenciales por correo electrónico
+- **Registro y autenticación JWT**: alta de cuentas, login y emisión de tokens.
+- **Provisionamiento automatizado**: creación de bases de datos PostgreSQL (motores adicionales en hoja de ruta).
+- **Gestión multi-instancia**: control de múltiples bases de datos por usuario.
+- **Cuotas por plan**: límites dinámicos según plan gratuito, intermedio o avanzado.
+- **Notificaciones por correo**: envío de credenciales mediante servicios como SendGrid.
+
+## ⚙️ Funcionalidad del Sistema
+
+- **Plan gratuito**: permite hasta 2 bases de datos por motor.
+- **Plan intermedio**: hasta 5 bases de datos por motor — 💰 $5.000 COP/mes.
+- **Plan avanzado**: hasta 10 bases de datos por motor — 💰 $10.000 COP/mes.
+- **Aislamiento de credenciales**: cada instancia cuenta con usuario, contraseña, puerto y permisos independientes.
+
+## 🧱 Tecnologías a Utilizar
+
+| Componente | Tecnología |
+|------------|------------|
+| Frontend | Vue.js |
+| Backend | ASP.NET Core Web API |
+| Autenticación | JWT (JSON Web Token) |
+| Pasarela de pagos | Mercado Pago |
+| Correos electrónicos | SendGrid / SMTP configurable |
+| Notificaciones externas | Webhooks |
+
+## 🧩 Funcionalidades Principales
+
+- **Registro y Autenticación**: creación de cuentas, verificación por correo, inicio de sesión JWT y recuperación de contraseña.
+- **Gestión de Planes y Membresías**: asignación automática del plan gratuito, upgrades vía Mercado Pago y control de cuotas por motor.
+- **Provisionamiento de Bases de Datos**: selección de motor, generación automática de credenciales, visualización controlada y rotación según necesidad.
+- **Facturación y Pagos**: suscripciones mensuales, validación de cobros y actualización automática del plan.
+- **Notificaciones por Correo**: alta de cuenta, creación/eliminación de instancias y cambios de plan.
+- **Webhooks**: eventos para acciones de usuario y alertas de errores críticos.
+- **Panel de Control**: dashboard con plan vigente, cuotas, listado de bases y herramientas de facturación y webhooks.
+
+## 🔒 Requisitos de Seguridad
+
+- **Aislamiento de acceso**: cada base de datos debe tener usuarios y permisos independientes.
+- **Comunicación segura**: todo tráfico entre cliente y servidor viaja sobre HTTPS.
+- **Protección de claves**: contraseñas cifradas, nunca en texto plano.
+- **Auditoría y logging**: registro de acciones relevantes y trazabilidad de errores.
+
+## 📣 Requisitos de Comunicación y Reportes
+
+- **Auditoría**: almacenar eventos significativos del sistema.
+- **Reportes de error**: enviar fallos en producción mediante webhooks.
+- **Estado de notificaciones**: registrar si cada correo o webhook fue enviado correctamente.
+
+## ✅ Resultados Esperados (Demo)
+
+- **Cuenta activa**: alta y acceso a la plataforma.
+- **Provisionamiento multi-motor**: creación de bases en al menos dos motores distintos.
+- **Upgrade de plan**: cambio de plan con Mercado Pago (sandbox).
+- **Notificaciones funcionales**: recepción de correos y webhooks en los flujos principales.
+- **Panel operativo**: interfaz moderna y utilizable.
+
+## 📦 Entregables
+
+- **Documento de arquitectura**: diagramas, flujos y dependencias.
+- **Backend ASP.NET Core**: API con autenticación JWT y endpoints operativos.
+- **Frontend Vue.js**: aplicación con rutas, componentes y estilos.
+- **Integración Mercado Pago**: cobros funcionales en producción o sandbox.
+- **Sistema de correos y webhooks**: implementado y documentado.
+- **Video demostrativo**: recorrido del flujo principal.
+- **Repositorio completo**: documentación y README actualizados.
+
+## 🛠️ Recomendaciones de Desarrollo
+
+- **Control de versiones**: trabajar con Git/GitHub y flujos colaborativos.
+- **Arquitectura en capas**: mantener separación de responsabilidades clara.
+- **Entornos separados**: definir ambientes de desarrollo, pruebas y producción.
+- **Validación y manejo de errores**: sanitizar entradas y capturar excepciones.
+- **Logging y auditoría**: instrumentar telemetría desde el backend.
+
+## 🎯 Competencias a Desarrollar
+
+- **Diseño de APIs seguras** con JWT y buenas prácticas.
+- **Integración de pagos** mediante Mercado Pago.
+- **Automatización de recursos** y despliegues en servidores.
+- **Interfaces reactivas** con Vue.js.
+- **Notificaciones y observabilidad** (correos, webhooks, logs).
+- **Trabajo colaborativo** y uso efectivo de Git.
+
+## 📊 Criterios de Evaluación
+
+| Criterio | Descripción | Peso |
+|----------|-------------|------|
+| Arquitectura del sistema | Diseño estructurado, separación de capas, buenas prácticas | 20% |
+| Funcionalidad backend | Autenticación, gestión de bases de datos, webhooks | 25% |
+| Interfaz frontend | Usabilidad, experiencia de usuario, diseño | 20% |
+| Integraciones externas | Mercado Pago, correos y webhooks | 15% |
+| Seguridad y errores | JWT, cifrado, control de excepciones | 10% |
+| Documentación y demo | README, diagramas, video, repositorio | 10% |
 
 ## 📋 Requisitos Previos
 
@@ -190,7 +283,7 @@ El servicio `SendGridEmailService` en `src/CCD.Infrastructure/Services/SendGridE
 - **`SendGrid:FromEmail` / `SendGrid:FromName`**: Remitente visible en los correos.
 - **`App:DashboardUrl`**: URL que aparece en los mensajes enviados a los usuarios.
 
-Si no configuras la API Key, el servicio lanzará una excepción en tiempo de ejecución y el backend no iniciará.
+Si no configuras la API Key, el servicio continúa operando pero registrará advertencias y omitirá el envío de correos hasta que proporciones la clave válida.
 
 ## 🐳 Despliegue con Docker Compose
 
