@@ -2,11 +2,12 @@
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core; // Para usar la entidad DatabaseInstance
-using CCD.Core.Interfaces; // Para usar IDatabaseProvisioner
+using CCD.Core.Interfaces; // Para usar IDatabaseProvisioner e IEmailService
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TimeZoneConverter;
 
 [Authorize]
 [ApiController]
@@ -21,8 +22,8 @@ public class DatabasesController : ControllerBase
 
     // Inyectamos el DbContext para interactuar con nuestra base de datos de gestión.
     public DatabasesController(
-        IConfiguration config, 
-        ApplicationDbContext context, 
+        IConfiguration config,
+        ApplicationDbContext context,
         IDatabaseProvisioner databaseProvisioner,
         IEmailService emailService,
         ILogger<DatabasesController> logger)
@@ -47,22 +48,45 @@ public class DatabasesController : ControllerBase
         }
         var userId = Guid.Parse(userIdString);
 
-        // 2. Buscamos en la tabla DatabaseInstances todas las entradas que pertenezcan a este usuario.
+        // 2. Buscamos las bases de datos del usuario.
         var databases = await _context.DatabaseInstances
             .Where(db => db.UserId == userId)
-            // 3. Convertimos cada resultado a un DTO para enviar solo la información necesaria al frontend.
-            .Select(db => new DatabaseResponseDto
+            .AsNoTracking()
+            .ToListAsync();
+
+        // 3. Convertimos cada resultado a un DTO aplicando la zona horaria almacenada.
+        var response = databases.Select(db =>
+        {
+            TimeZoneInfo timeZone;
+            try
+            {
+                timeZone = TZConvert.GetTimeZoneInfo(db.TimeZoneId);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                timeZone = TimeZoneInfo.Utc;
+            }
+            catch (InvalidTimeZoneException)
+            {
+                timeZone = TimeZoneInfo.Utc;
+            }
+
+            var createdAtLocal = TimeZoneInfo.ConvertTimeFromUtc(db.CreatedAt, timeZone);
+
+            return new DatabaseResponseDto
             {
                 Id = db.Id,
                 Name = db.Name,
                 Engine = db.Engine,
                 Status = db.Status,
-                CreatedAt = db.CreatedAt
-            })
-            .ToListAsync();
+                CreatedAt = createdAtLocal,
+                CreatedAtUtc = db.CreatedAt,
+                TimeZoneId = db.TimeZoneId
+            };
+        }).ToList();
 
         // 4. Devolvemos la lista de bases de datos.
-        return Ok(databases);
+        return Ok(response);
     }
 
     // --- ENDPOINT PARA OBTENER ESTADÍSTICAS DEL DASHBOARD ---
@@ -81,6 +105,7 @@ public class DatabasesController : ControllerBase
         // 2. Obtener todas las bases de datos del usuario
         var databases = await _context.DatabaseInstances
             .Where(db => db.UserId == userId)
+            .AsNoTracking()
             .ToListAsync();
 
         // 3. Calcular estadísticas por motor
@@ -118,8 +143,25 @@ public class DatabasesController : ControllerBase
         }
         var userId = Guid.Parse(userIdString);
 
+        TimeZoneInfo userTimeZoneInfo;
+        string normalizedTimeZoneId;
+        try
+        {
+            userTimeZoneInfo = TZConvert.GetTimeZoneInfo(createDto.TimeZoneId);
+            normalizedTimeZoneId = TZConvert.TryWindowsToIana(userTimeZoneInfo.Id, out var ianaId)
+                ? ianaId
+                : userTimeZoneInfo.Id;
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return BadRequest(new { message = $"Zona horaria '{createDto.TimeZoneId}' no es válida." });
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return BadRequest(new { message = $"Zona horaria '{createDto.TimeZoneId}' no es válida." });
+        }
+
         // --- LÓGICA DE VALIDACIÓN DE CUOTAS (Tu Responsabilidad) ---
-        // Asumimos un plan gratuito por ahora.
         const int freePlanLimit = 2;
 
         // Contamos cuántas bases de datos del motor solicitado ya tiene el usuario.
@@ -139,9 +181,6 @@ public class DatabasesController : ControllerBase
         try
         {
             // PASO 1: Llamar al servicio que crea la base de datos real
-            // Este servicio se conecta a PostgreSQL como superusuario y ejecuta:
-            // - CREATE USER con una contraseña segura generada automáticamente
-            // - CREATE DATABASE asignando el usuario como dueño
             var connectionDetails = await _databaseProvisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
             if (connectionDetails == null)
@@ -150,15 +189,14 @@ public class DatabasesController : ControllerBase
             }
 
             // Validar que los campos obligatorios no sean nulos
-            if (string.IsNullOrEmpty(connectionDetails.DatabaseName) || 
-                string.IsNullOrEmpty(createDto.Engine) || 
+            if (string.IsNullOrEmpty(connectionDetails.DatabaseName) ||
+                string.IsNullOrEmpty(createDto.Engine) ||
                 string.IsNullOrEmpty(connectionDetails.Username))
             {
                 return StatusCode(500, new { message = "Error: No se pudieron generar todas las credenciales necesarias." });
             }
 
             // PASO 2: Guardar el registro en nuestra base de datos de gestión
-            // Esto es para que el usuario pueda ver sus bases de datos en el dashboard
             var newDbInstance = new DatabaseInstance
             {
                 Name = connectionDetails.DatabaseName,  // Nombre generado automáticamente
@@ -166,10 +204,10 @@ public class DatabasesController : ControllerBase
                 Status = "Active",                      // Estado inicial: activa
                 DbUsername = connectionDetails.Username, // Usuario de la base de datos
                 UserId = userId,                        // Asociar al usuario actual
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                TimeZoneId = normalizedTimeZoneId
             };
 
-            // Agregamos la nueva instancia a la base de datos y guardamos los cambios
             await _context.DatabaseInstances.AddAsync(newDbInstance);
             await _context.SaveChangesAsync();
 
@@ -183,7 +221,7 @@ public class DatabasesController : ControllerBase
                         userEmail,
                         User.Identity?.Name ?? "Usuario",
                         connectionDetails);
-                    
+
                     _logger.LogInformation($"Correo de credenciales enviado a {userEmail}");
                 }
                 else
@@ -193,7 +231,6 @@ public class DatabasesController : ControllerBase
             }
             catch (Exception ex)
             {
-                // No fallar la operación si el correo no se puede enviar, solo registrar el error
                 _logger.LogError(ex, "Error al enviar correo con credenciales");
             }
 
@@ -204,28 +241,32 @@ public class DatabasesController : ControllerBase
                 return StatusCode(500, new { message = "Error al generar las credenciales de conexión." });
             }
 
+            var createdAtLocal = TimeZoneInfo.ConvertTimeFromUtc(newDbInstance.CreatedAt, userTimeZoneInfo);
+
             var responseDto = new DatabaseResponseDto
             {
                 Id = newDbInstance.Id,
-                Name = newDbInstance.Name ?? "",
-                Engine = newDbInstance.Engine ?? "",
+                Name = newDbInstance.Name ?? string.Empty,
+                Engine = newDbInstance.Engine ?? string.Empty,
                 Status = newDbInstance.Status ?? "Active",
-                CreatedAt = newDbInstance.CreatedAt,
+                CreatedAt = createdAtLocal,
+                CreatedAtUtc = newDbInstance.CreatedAt,
+                TimeZoneId = newDbInstance.TimeZoneId,
                 // Incluir credenciales solo para la respuesta de creación
                 Host = connectionDetails.Host,
                 Port = connectionDetails.Port,
                 Username = connectionDetails.Username,
                 Password = connectionDetails.Password
             };
-            // CreatedAtAction devuelve 201 y la URL donde se puede consultar el recurso creado
+
             return CreatedAtAction(nameof(GetDatabasesForUser), new { id = responseDto.Id }, responseDto);
         }
         catch (Exception ex)
         {
-            // Si ocurre cualquier error (conexión, permisos, etc.), lo capturamos aquí
-            return StatusCode(500, new { 
-                message = "No se pudo crear la base de datos.", 
-                detail = ex.Message 
+            return StatusCode(500, new
+            {
+                message = "No se pudo crear la base de datos.",
+                detail = ex.Message
             });
         }
     }
@@ -258,8 +299,8 @@ public class DatabasesController : ControllerBase
         try
         {
             var deleted = await _databaseProvisioner.DeleteDatabaseAsync(
-                dbInstance.Engine, 
-                dbInstance.Name, 
+                dbInstance.Engine,
+                dbInstance.Name,
                 dbInstance.DbUsername
             );
 
@@ -270,16 +311,16 @@ public class DatabasesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { 
-                message = "Error al eliminar la base de datos del servidor.", 
-                detail = ex.Message 
+            return StatusCode(500, new
+            {
+                message = "Error al eliminar la base de datos del servidor.",
+                detail = ex.Message
             });
         }
 
-        // Eliminar el registro de nuestra base de datos de gestión
         _context.DatabaseInstances.Remove(dbInstance);
         await _context.SaveChangesAsync();
 
-        return NoContent(); // Respuesta estándar para un borrado exitoso.
+        return NoContent();
     }
 }
