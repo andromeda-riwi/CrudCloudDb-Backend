@@ -12,7 +12,6 @@ namespace CCD.Infrastructure.Services;
 public class DatabaseProvisioner : IDatabaseProvisioner
 {
     private readonly IConfiguration _config;
-
     public DatabaseProvisioner(IConfiguration config)
     {
         _config = config;
@@ -84,8 +83,23 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         await using var dbConnection = new NpgsqlConnection(dbConnectionString);
         await dbConnection.OpenAsync();
 
-        // Dar permisos completos sobre el schema public pero sin DROP DATABASE
-        var grantSchemaCommand = "GRANT ALL PRIVILEGES ON SCHEMA public TO \"" + escapedUser + "\";";
+        // Configurar permisos seguros para el usuario (mejoras de origin/dev)
+        var grantSchemaCommand = $@"
+            -- Permisos básicos sobre tablas existentes
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ""{escapedUser}"";
+            
+            -- Permisos sobre secuencias (para campos autoincrementales)
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ""{escapedUser}"";
+            
+            -- Permisos por defecto para tablas futuras
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public 
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ""{escapedUser}"";
+            
+            -- Permisos por defecto para secuencias futuras
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public 
+            GRANT USAGE, SELECT ON SEQUENCES TO ""{escapedUser}"";";
+            
+        // Aplicar permisos
         await using (var cmd = new NpgsqlCommand(grantSchemaCommand, dbConnection))
         {
             await cmd.ExecuteNonQueryAsync();
@@ -98,7 +112,8 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Port = connection.Port,
             DatabaseName = dbName,
             Username = dbUser,
-            Password = dbPassword
+            Password = dbPassword,
+            Engine = "PostgreSQL"
         };
     }
 
@@ -177,7 +192,8 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Port = port,
             DatabaseName = dbName,
             Username = dbUser,
-            Password = dbPassword
+            Password = dbPassword,
+            Engine = "MongoDB"
         };
     }
 
@@ -240,7 +256,8 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Port = connection.ServerVersion != null ? 3306 : 3306, // Puerto por defecto MySQL
             DatabaseName = dbName,
             Username = dbUser,
-            Password = dbPassword
+            Password = dbPassword,
+            Engine = "MySQL"
         };
     }
 
@@ -356,7 +373,8 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Port = 1433, // Puerto por defecto SQL Server
             DatabaseName = dbName,
             Username = dbUser,
-            Password = dbPassword
+            Password = dbPassword,
+            Engine = "SQL Server"
         };
     }
 
@@ -500,40 +518,121 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         var adminConnectionString = _config.GetConnectionString("AdminSqlServerConnection");
         if (string.IsNullOrEmpty(adminConnectionString))
         {
+            Console.WriteLine("Error: No se encontró la cadena de conexión 'AdminSqlServerConnection'");
             return false;
         }
 
-        await using var connection = new SqlConnection(adminConnectionString);
-        await connection.OpenAsync();
-
-        // Poner la base de datos en modo SINGLE_USER para cerrar todas las conexiones
-        var setSingleUserCommand = $"ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;";
+        Console.WriteLine($"Intentando eliminar base de datos SQL Server: {databaseName}, Usuario: {username}");
+        
         try
         {
-            await using (var cmd = new SqlCommand(setSingleUserCommand, connection))
+            Console.WriteLine("Estableciendo conexión con el servidor SQL...");
+            using var connection = new SqlConnection(adminConnectionString);
+            await connection.OpenAsync();
+            Console.WriteLine("Conexión establecida correctamente");
+
+            try
             {
-                await cmd.ExecuteNonQueryAsync();
+                // 1. Verificar si la base de datos existe
+                var dbExistsCmd = new SqlCommand(
+                    $"SELECT 1 FROM sys.databases WHERE name = @dbName", 
+                    connection);
+                dbExistsCmd.Parameters.AddWithValue("@dbName", databaseName);
+                
+                var dbExists = await dbExistsCmd.ExecuteScalarAsync() != null;
+                Console.WriteLine($"Base de datos {databaseName} existe: {dbExists}");
+
+                if (!dbExists)
+                {
+                    Console.WriteLine($"La base de datos {databaseName} no existe, procediendo a limpiar el login");
+                }
+                else
+                {
+                    // 2. Cerrar todas las conexiones existentes
+                    Console.WriteLine("Cerrando conexiones activas...");
+                    var killSessionsSql = @"
+                        DECLARE @killSessions NVARCHAR(MAX) = '';
+                        SELECT @killSessions = @killSessions + 'KILL ' + CAST(session_id AS NVARCHAR(10)) + '; '
+                        FROM sys.dm_exec_sessions 
+                        WHERE DB_NAME(database_id) = @dbName;
+                        
+                        IF LEN(@killSessions) > 0
+                            EXEC sp_executesql @killSessions;";
+
+                    using var killCmd = new SqlCommand(killSessionsSql, connection);
+                    killCmd.Parameters.AddWithValue("@dbName", databaseName);
+                    await killCmd.ExecuteNonQueryAsync();
+                    Console.WriteLine("Conexiones cerradas");
+
+                    // 3. Poner la base de datos en modo SINGLE_USER
+                    Console.WriteLine("Poniendo base de datos en modo SINGLE_USER...");
+                    var setSingleUserCmd = new SqlCommand(
+                        $"ALTER DATABASE [{databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;", 
+                        connection);
+                    await setSingleUserCmd.ExecuteNonQueryAsync();
+                    Console.WriteLine("Base de datos en modo SINGLE_USER");
+
+                    // 4. Eliminar la base de datos
+                    Console.WriteLine("Eliminando base de datos...");
+                    var dropDbCmd = new SqlCommand(
+                        $"DROP DATABASE IF EXISTS [{databaseName}];", 
+                        connection);
+                    await dropDbCmd.ExecuteNonQueryAsync();
+                    Console.WriteLine("Base de datos eliminada");
+                }
+
+                // 5. Eliminar el login de SQL Server si existe
+                Console.WriteLine("Verificando login de usuario...");
+                var loginExistsCmd = new SqlCommand(
+                    "SELECT 1 FROM sys.server_principals WHERE name = @username", 
+                    connection);
+                loginExistsCmd.Parameters.AddWithValue("@username", username);
+                
+                var loginExists = await loginExistsCmd.ExecuteScalarAsync() != null;
+                Console.WriteLine($"Login {username} existe: {loginExists}");
+
+                if (loginExists)
+                {
+                    Console.WriteLine("Eliminando login de usuario...");
+                    var dropLoginCmd = new SqlCommand(
+                        $"DROP LOGIN [{username}]", 
+                        connection);
+                    await dropLoginCmd.ExecuteNonQueryAsync();
+                    Console.WriteLine("Login eliminado");
+                }
+
+                Console.WriteLine("Eliminación completada con éxito");
+                return true;
+            }
+            catch (SqlException sqlEx)
+            {
+                Console.WriteLine($"Error de SQL al eliminar la base de datos {databaseName}:");
+                Console.WriteLine($"Número de error: {sqlEx.Number}");
+                Console.WriteLine($"Mensaje: {sqlEx.Message}");
+                Console.WriteLine($"Procedimiento: {sqlEx.Procedure}");
+                Console.WriteLine($"Número de línea: {sqlEx.LineNumber}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error inesperado al eliminar la base de datos {databaseName}:");
+                Console.WriteLine(ex.ToString());
+                return false;
             }
         }
-        catch
+        catch (SqlException sqlEx)
         {
-            // Si falla, continuamos de todas formas
+            Console.WriteLine($"Error de conexión SQL:");
+            Console.WriteLine($"Número de error: {sqlEx.Number}");
+            Console.WriteLine($"Mensaje: {sqlEx.Message}");
+            Console.WriteLine($"Servidor: {sqlEx.Server}");
+            return false;
         }
-
-        // Eliminar la base de datos
-        var dropDbCommand = $"DROP DATABASE IF EXISTS [{databaseName}];";
-        await using (var cmd = new SqlCommand(dropDbCommand, connection))
+        catch (Exception ex)
         {
-            await cmd.ExecuteNonQueryAsync();
+            Console.WriteLine($"Error de conexión inesperado: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            return false;
         }
-
-        // Eliminar el login
-        var dropLoginCommand = $"DROP LOGIN IF EXISTS [{username}];";
-        await using (var cmd = new SqlCommand(dropLoginCommand, connection))
-        {
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        return true;
     }
 }

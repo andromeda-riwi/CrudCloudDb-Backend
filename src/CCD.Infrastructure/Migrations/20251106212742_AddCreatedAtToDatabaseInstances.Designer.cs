@@ -3,6 +3,7 @@ using System;
 using CCD.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CCD.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251106212742_AddCreatedAtToDatabaseInstances")]
+    partial class AddCreatedAtToDatabaseInstances
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -47,10 +50,6 @@ namespace CCD.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("TimeZoneId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
@@ -70,12 +69,6 @@ namespace CCD.Infrastructure.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("DatabaseLimitPerEngine")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("MaxDatabases")
                         .HasColumnType("integer");
 
                     b.Property<string>("MercadoPagoPriceId")
@@ -99,8 +92,6 @@ namespace CCD.Infrastructure.Migrations
                         {
                             Id = 1,
                             DatabaseLimitPerEngine = 2,
-                            IsActive = true,
-                            MaxDatabases = 2,
                             MercadoPagoPriceId = "N/A",
                             Name = "Gratuito",
                             Price = 0.00m
@@ -109,8 +100,6 @@ namespace CCD.Infrastructure.Migrations
                         {
                             Id = 2,
                             DatabaseLimitPerEngine = 5,
-                            IsActive = true,
-                            MaxDatabases = 5,
                             MercadoPagoPriceId = "price_id_intermedio",
                             Name = "Intermedio",
                             Price = 5000.00m
@@ -119,8 +108,6 @@ namespace CCD.Infrastructure.Migrations
                         {
                             Id = 3,
                             DatabaseLimitPerEngine = 10,
-                            IsActive = true,
-                            MaxDatabases = 10,
                             MercadoPagoPriceId = "price_id_avanzado",
                             Name = "Avanzado",
                             Price = 10000.00m
