@@ -90,8 +90,8 @@ public class ApplicationDbContext : DbContext
                 Id = 1, 
                 Name = "Gratuito", 
                 DatabaseLimitPerEngine = 2, 
-                Price = 0.00m, 
-                MercadoPagoPriceId = "N/A" // No tiene ID de pago
+                Price = 0.00m, // Correcto
+                MercadoPagoPriceId = "N/A"
             },
             new Plan 
             { 
@@ -99,15 +99,15 @@ public class ApplicationDbContext : DbContext
                 Name = "Intermedio", 
                 DatabaseLimitPerEngine = 5, 
                 Price = 5000.00m, 
-                MercadoPagoPriceId = "price_id_intermedio" // Reemplazar con el ID real de Mercado Pago
+                MercadoPagoPriceId = "price_id_intermedio" // Este valor no se usa en tu lógica actual, pero es bueno tenerlo
             },
             new Plan 
             { 
                 Id = 3, 
                 Name = "Avanzado", 
                 DatabaseLimitPerEngine = 10, 
-                Price = 10000.00m, 
-                MercadoPagoPriceId = "price_id_avanzado" // Reemplazar con el ID real de Mercado Pago
+                Price = 10000.00m, // Correcto: $10.000 COP
+                MercadoPagoPriceId = "price_id_avanzado" // Este valor no se usa en tu lógica actual
             }
         );
     }

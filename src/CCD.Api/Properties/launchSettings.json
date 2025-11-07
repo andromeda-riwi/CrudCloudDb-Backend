@@ -15,9 +15,10 @@
       "launchBrowser": true,
       "launchUrl": "swagger",
       "applicationUrl": "http://localhost:5063",
-      "environmentVariables": {
+      "environmentVariables": {    
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "MercadoPago__AccessToken": "APP_USR-1182685604028217-110419-8c06190bd25923b9a1ee1baa43444cca-2945858260"
+        "MercadoPago__AccessToken": "APP_USR-1182685604028217-110419-8c06190bd25923b9a1ee1baa43444cca-2945858260",
+        "MercadoPago__WebhookSecret": "7abf6a715dab41a170b91afacfc551a1e2f473c5b524f6a64db26fab1e97364f" 
       }
     },
     "https": {
