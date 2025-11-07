@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization; // <-- Importante
 using Microsoft.AspNetCore.Mvc;
@@ -36,6 +36,9 @@ public class UsersController : ControllerBase
             .Select(u => new UserResponseDto // Usamos el DTO para no exponer datos sensibles
             {
                 Id = u.Id,
+                Name = u.Name,
+                LastName = u.LastName,
+                UserName = u.UserName,
                 Email = u.Email
             })
             .FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));

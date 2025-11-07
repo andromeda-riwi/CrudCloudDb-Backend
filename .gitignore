@@ -1,6 +1,6 @@
 # ## Archivos y carpetas generados por IDEs (Rider, Visual Studio) ##
 .idea/
-.vs/
+vs/
 
 # ## Carpetas de compilación de .NET ##
 [Bb]in/
@@ -18,4 +18,14 @@
 *.log
 
 # ## ¡SECRETS! ##
-appsettings.Development.json
+appsettings.json
+appsettings.*.json
+!appsettings.Development.json.example
+
+# Variables de entorno
+.env
+*.env
+
+# Archivos de configuración local
+local.settings.json
+secrets.json
