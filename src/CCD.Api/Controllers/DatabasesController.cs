@@ -15,7 +15,7 @@ using Microsoft.EntityFrameworkCore;
 public class DatabasesController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    // Servicio que crea bases de datos reales en múltiples motores (PostgreSQL, MongoDB, etc.)
+    // Servicio que crea bases de datos reales en múltiples motores (PostgreSQL, MongoDB, MySQL, SQL Server, etc.)
     private readonly IDatabaseProvisioner _provisioner;
 
     // Inyectamos el DbContext y el servicio de aprovisionamiento
@@ -124,13 +124,15 @@ public class DatabasesController : ControllerBase
         // --- FIN DE LA LÓGICA DE CUOTAS ---
 
         // --- LÓGICA DE APROVISIONAMIENTO ---
-        // Aquí es donde realmente creamos la base de datos en el motor solicitado (PostgreSQL, MongoDB, etc.)
+        // Aquí es donde realmente creamos la base de datos en el motor solicitado (PostgreSQL, MongoDB, MySQL, SQL Server, etc.)
         try
         {
             // PASO 1: Llamar al servicio que crea la base de datos real
             // Este servicio se conecta al motor de base de datos como administrador y:
             // - Para PostgreSQL: Crea usuario y base de datos con permisos aislados
             // - Para MongoDB: Crea base de datos, usuario con roles readWrite y dbAdmin
+            // - Para MySQL: Crea base de datos y usuario con permisos específicos
+            // - Para SQL Server: Crea base de datos, login y usuario con roles específicos
             // - Genera credenciales seguras (usuario, contraseña) automáticamente
             var connectionDetails = await _provisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
@@ -147,6 +149,7 @@ public class DatabasesController : ControllerBase
                 Name = connectionDetails.DatabaseName,  // Nombre generado automáticamente
                 Engine = createDto.Engine,              // Motor solicitado (PostgreSQL, MySQL, etc.)
                 Status = "Active",                      // Estado inicial: activa
+                DbUsername = connectionDetails.Username, // Usuario de la base de datos
                 UserId = userId                         // Asociar al usuario actual
             };
 
@@ -185,7 +188,6 @@ public class DatabasesController : ControllerBase
         }
     }
 
-
     // --- ENDPOINT PARA ELIMINAR UNA BASE DE DATOS ---
     // Responde a peticiones DELETE en /api/databases/some-guid-id
     [HttpDelete("{id}")]
@@ -210,8 +212,29 @@ public class DatabasesController : ControllerBase
             return Forbid(); // La base de datos no pertenece a este usuario
         }
 
-        // TODO: Llamar a un servicio para eliminar la base de datos y el usuario del servidor real.
+        // Llamar al servicio para eliminar la base de datos y el usuario del servidor real
+        try
+        {
+            var deleted = await _provisioner.DeleteDatabaseAsync(
+                dbInstance.Engine, 
+                dbInstance.Name, 
+                dbInstance.DbUsername
+            );
 
+            if (!deleted)
+            {
+                return StatusCode(500, new { message = "No se pudo eliminar la base de datos del servidor." });
+            }
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { 
+                message = "Error al eliminar la base de datos del servidor.", 
+                detail = ex.Message 
+            });
+        }
+
+        // Eliminar el registro de nuestra base de datos de gestión
         _context.DatabaseInstances.Remove(dbInstance);
         await _context.SaveChangesAsync();
 

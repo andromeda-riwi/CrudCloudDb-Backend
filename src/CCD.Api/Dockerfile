@@ -1,38 +1,28 @@
-﻿# -----------------------------
-# Etapa 1: Build (Compilación del SDK)
-# Usa la imagen del SDK de .NET 8 para compilar el proyecto
-# -----------------------------
+# --- Etapa de Compilación (Build Stage) ---
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copiar todos los archivos .csproj y restaurar las dependencias primero
-# Esto aprovecha el caché de Docker para acelerar futuras compilaciones
+# Copia los archivos .csproj primero
 COPY ["src/CCD.Api/CCD.Api.csproj", "src/CCD.Api/"]
 COPY ["src/CCD.Core/CCD.Core.csproj", "src/CCD.Core/"]
 COPY ["src/CCD.Infrastructure/CCD.Infrastructure.csproj", "src/CCD.Infrastructure/"]
+
+# Restaura las dependencias
 RUN dotnet restore "src/CCD.Api/CCD.Api.csproj"
 
-# Copiar todo el código fuente del proyecto
+# Copia todo el código fuente
 COPY . .
+
+# Establece el directorio de trabajo a la carpeta de la API para compilar
 WORKDIR "/src/src/CCD.Api"
 RUN dotnet build "CCD.Api.csproj" -c Release -o /app/build
 
-# -----------------------------
-# Etapa 2: Publish (Publicación)
-# -----------------------------
+# --- Etapa de Publicación (Publish Stage) ---
 FROM build AS publish
 RUN dotnet publish "CCD.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-# -----------------------------
-# Etapa 3: Runtime (Ejecución final)
-# Usa la imagen más ligera de ASP.NET, que no incluye el SDK de compilación
-# -----------------------------
+# --- Etapa Final (Final Stage) ---
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
-EXPOSE 8080
-
-# Copiar los archivos publicados desde la etapa de 'publish'
 COPY --from=publish /app/publish .
-
-# El comando que se ejecutará cuando el contenedor inicie
 ENTRYPOINT ["dotnet", "CCD.Api.dll"]

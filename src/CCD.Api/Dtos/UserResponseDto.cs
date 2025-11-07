@@ -1,8 +1,10 @@
-﻿namespace CCD.Api.Dtos;
+namespace CCD.Api.Dtos;
 
 public class UserResponseDto
 {
     public Guid Id { get; set; }
-    // Asígnale un valor por defecto para satisfacer al compilador
+    public string Name { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty; 
 }
