@@ -1,4 +1,4 @@
-// --- Imports necesarios ---
+﻿// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core; // Para usar la entidad DatabaseInstance
@@ -102,29 +102,45 @@ public class DatabasesController : ControllerBase
         }
         var userId = Guid.Parse(userIdString);
 
-        // 2. Obtener todas las bases de datos del usuario
+        // 2. Obtener el usuario con su plan
+        var user = await _context.Users
+            .Include(u => u.Plan)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        // 3. Obtener todas las bases de datos del usuario
         var databases = await _context.DatabaseInstances
             .Where(db => db.UserId == userId)
             .AsNoTracking()
             .ToListAsync();
 
-        // 3. Calcular estadísticas por motor
+        // 4. Calcular estadísticas por motor
         var databasesByEngine = databases
             .GroupBy(db => db.Engine)
             .ToDictionary(g => g.Key, g => g.Count());
 
-        // 4. Obtener plan del usuario (por ahora hardcoded a "Básico")
-        var currentPlan = "Básico";
-        var maxDatabases = 10; // Límite del plan básico
-        var monthlyPrice = 0; // Plan gratuito
+        // 5. Obtener información del plan del usuario
+        var currentPlan = user.Plan?.Name ?? "Básico";
+        var maxDatabasesPerEngine = user.Plan?.DatabaseLimitPerEngine ?? 2;
+        var monthlyPrice = user.Plan?.Price ?? 0;
 
-        // 5. Retornar estadísticas
+        // Calcular el número de motores disponibles (PostgreSQL, MySQL, MongoDB, etc.)
+        // Por ahora, asumimos 3 motores principales
+        const int availableEngines = 6; // PostgreSQL, MySQL, MongoDB, MariaDB, Redis, SQLite
+        var maxTotalDatabases = maxDatabasesPerEngine * availableEngines;
+
+        // 6. Retornar estadísticas
         return Ok(new
         {
             totalDatabases = databases.Count,
             databasesByEngine = databasesByEngine,
             currentPlan = currentPlan,
-            maxDatabases = maxDatabases,
+            maxDatabasesPerEngine = maxDatabasesPerEngine,
+            maxTotalDatabases = maxTotalDatabases,
             monthlyPrice = monthlyPrice,
             nextBillingDate = (string?)null
         });
@@ -161,17 +177,29 @@ public class DatabasesController : ControllerBase
             return BadRequest(new { message = $"Zona horaria '{createDto.TimeZoneId}' no es válida." });
         }
 
-        // --- LÓGICA DE VALIDACIÓN DE CUOTAS (Tu Responsabilidad) ---
-        const int freePlanLimit = 2;
+        // --- LÓGICA DE VALIDACIÓN DE CUOTAS ---
+        // Obtener el usuario con su plan para validar límites
+        var user = await _context.Users
+            .Include(u => u.Plan)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        // Obtener el límite de bases de datos por motor según el plan del usuario
+        var databaseLimitPerEngine = user.Plan?.DatabaseLimitPerEngine ?? 2;
 
         // Contamos cuántas bases de datos del motor solicitado ya tiene el usuario.
         var currentDbCount = await _context.DatabaseInstances
             .CountAsync(db => db.UserId == userId && db.Engine == createDto.Engine);
 
         // Si el conteo es igual o mayor al límite, rechazamos la petición.
-        if (currentDbCount >= freePlanLimit)
+        if (currentDbCount >= databaseLimitPerEngine)
         {
-            return BadRequest(new { message = $"Has alcanzado el límite de {freePlanLimit} bases de datos para el motor {createDto.Engine} en el plan gratuito." });
+            var planName = user.Plan?.Name ?? "Gratuito";
+            return BadRequest(new { message = $"Has alcanzado el límite de {databaseLimitPerEngine} bases de datos para el motor {createDto.Engine} en tu plan {planName}. Mejora tu plan para crear más bases de datos." });
         }
         // --- FIN DE LA LÓGICA DE CUOTAS ---
 
