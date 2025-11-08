@@ -45,14 +45,35 @@ namespace CCD.Infrastructure.Migrations
             ");
 
             // Agregar PlanId solo si no existe
+            // Verificar el tipo de dato de Plans.Id para usar el mismo tipo
             migrationBuilder.Sql(@"
                 DO $$ 
+                DECLARE
+                    plans_id_type text;
+                    default_plan_id integer := 1;
                 BEGIN
+                    -- Obtener el tipo de dato de la columna Id de Plans
+                    SELECT data_type INTO plans_id_type
+                    FROM information_schema.columns
+                    WHERE table_name = 'Plans' AND column_name = 'Id';
+                    
                     IF NOT EXISTS (
                         SELECT 1 FROM information_schema.columns 
                         WHERE table_name = 'Users' AND column_name = 'PlanId'
                     ) THEN
-                        ALTER TABLE ""Users"" ADD COLUMN ""PlanId"" uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+                        -- Si Plans.Id es integer, usar integer para PlanId
+                        IF plans_id_type = 'integer' THEN
+                            -- Obtener el ID del plan gratuito o usar 1 por defecto
+                            SELECT COALESCE(MIN(""Id""), 1) INTO default_plan_id
+                            FROM ""Plans""
+                            WHERE ""Name"" IN ('Free', 'Gratuito')
+                            LIMIT 1;
+                            
+                            ALTER TABLE ""Users"" ADD COLUMN ""PlanId"" integer NOT NULL DEFAULT default_plan_id;
+                        -- Si Plans.Id es uuid, usar uuid para PlanId
+                        ELSIF plans_id_type = 'uuid' THEN
+                            ALTER TABLE ""Users"" ADD COLUMN ""PlanId"" uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+                        END IF;
                     END IF;
                 END $$;
             ");
@@ -80,17 +101,34 @@ namespace CCD.Infrastructure.Migrations
             ");
 
             // Insertar el plan gratuito por defecto solo si la tabla tiene las columnas correctas
+            // Verificar el tipo de dato de Id antes de insertar
             migrationBuilder.Sql(@"
                 DO $$ 
+                DECLARE
+                    id_type text;
                 BEGIN
+                    -- Obtener el tipo de dato de la columna Id
+                    SELECT data_type INTO id_type
+                    FROM information_schema.columns
+                    WHERE table_name = 'Plans' AND column_name = 'Id';
+                    
+                    -- Solo insertar si la tabla tiene la columna MaxDatabases
                     IF EXISTS (
                         SELECT 1 FROM information_schema.columns 
                         WHERE table_name = 'Plans' 
                         AND column_name = 'MaxDatabases'
                     ) THEN
-                        INSERT INTO ""Plans"" (""Id"", ""Name"", ""MaxDatabases"", ""IsActive"")
-                        SELECT gen_random_uuid(), 'Free', 2, true
-                        WHERE NOT EXISTS (SELECT 1 FROM ""Plans"" WHERE ""Name"" = 'Free');
+                        -- Si Id es integer, usar el próximo valor de la secuencia
+                        IF id_type = 'integer' THEN
+                            INSERT INTO ""Plans"" (""Name"", ""MaxDatabases"", ""IsActive"")
+                            SELECT 'Free', 2, true
+                            WHERE NOT EXISTS (SELECT 1 FROM ""Plans"" WHERE ""Name"" = 'Free' OR ""Name"" = 'Gratuito');
+                        -- Si Id es uuid, usar gen_random_uuid()
+                        ELSIF id_type = 'uuid' THEN
+                            INSERT INTO ""Plans"" (""Id"", ""Name"", ""MaxDatabases"", ""IsActive"")
+                            SELECT gen_random_uuid(), 'Free', 2, true
+                            WHERE NOT EXISTS (SELECT 1 FROM ""Plans"" WHERE ""Name"" = 'Free' OR ""Name"" = 'Gratuito');
+                        END IF;
                     END IF;
                 END $$;
             ");
