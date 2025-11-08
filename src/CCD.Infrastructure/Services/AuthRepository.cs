@@ -1,4 +1,4 @@
-// --- Imports necesarios para toda la funcionalidad ---
+﻿// --- Imports necesarios para toda la funcionalidad ---
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -170,7 +170,9 @@ public class AuthRepository : IAuthRepository
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Email, user.Email)
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Name, user.Name), // ← Nombre del usuario para mostrar en el frontend
+            new Claim("userName", user.UserName)    // ← Username adicional
         };
 
         var appSettingsToken = _config.GetSection("AppSettings:Token").Value;

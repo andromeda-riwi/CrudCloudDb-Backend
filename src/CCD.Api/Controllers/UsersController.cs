@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization; // <-- Importante
 using Microsoft.AspNetCore.Mvc;
@@ -39,7 +39,8 @@ public class UsersController : ControllerBase
                 Name = u.Name,
                 LastName = u.LastName,
                 UserName = u.UserName,
-                Email = u.Email
+                Email = u.Email,
+                PlanId = u.PlanId
             })
             .FirstOrDefaultAsync(u => u.Id == Guid.Parse(userId));
 
