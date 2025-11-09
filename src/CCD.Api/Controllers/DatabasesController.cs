@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+﻿// --- Imports necesarios ---
+>>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core; 
@@ -92,11 +96,27 @@ public class DatabasesController : ControllerBase
             return Unauthorized();
         }
         var userId = Guid.Parse(userIdString);
+<<<<<<< HEAD
         
+=======
+
+        // 2. Obtener el usuario con su plan
+        var user = await _context.Users
+            .Include(u => u.Plan)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        // 3. Obtener todas las bases de datos del usuario
+>>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
         var databases = await _context.DatabaseInstances
             .Where(db => db.UserId == userId)
             .AsNoTracking()
             .ToListAsync();
+<<<<<<< HEAD
         
         var databasesByEngine = databases
             .GroupBy(db => db.Engine)
@@ -107,12 +127,32 @@ public class DatabasesController : ControllerBase
         var monthlyPrice = 0; 
 
         
+=======
+
+        // 4. Calcular estadísticas por motor
+        var databasesByEngine = databases
+            .GroupBy(db => db.Engine)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // 5. Obtener información del plan del usuario
+        var currentPlan = user.Plan?.Name ?? "Básico";
+        var maxDatabasesPerEngine = user.Plan?.DatabaseLimitPerEngine ?? 2;
+        var monthlyPrice = user.Plan?.Price ?? 0;
+
+        // Calcular el número de motores disponibles (PostgreSQL, MySQL, MongoDB, etc.)
+        // Por ahora, asumimos 3 motores principales
+        const int availableEngines = 6; // PostgreSQL, MySQL, MongoDB, MariaDB, Redis, SQLite
+        var maxTotalDatabases = maxDatabasesPerEngine * availableEngines;
+
+        // 6. Retornar estadísticas
+>>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
         return Ok(new
         {
             totalDatabases = databases.Count,
             databasesByEngine = databasesByEngine,
             currentPlan = currentPlan,
-            maxDatabases = maxDatabases,
+            maxDatabasesPerEngine = maxDatabasesPerEngine,
+            maxTotalDatabases = maxTotalDatabases,
             monthlyPrice = monthlyPrice,
             nextBillingDate = (string?)null
         });
@@ -148,10 +188,26 @@ public class DatabasesController : ControllerBase
             return BadRequest(new { message = $"Zona horaria '{createDto.TimeZoneId}' no es válida." });
         }
 
+<<<<<<< HEAD
        
         var user = await _context.Users
             .Include(u => u.Plan) 
             .FirstOrDefaultAsync(u => u.Id == userId);
+=======
+        // --- LÓGICA DE VALIDACIÓN DE CUOTAS ---
+        // Obtener el usuario con su plan para validar límites
+        var user = await _context.Users
+            .Include(u => u.Plan)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        // Obtener el límite de bases de datos por motor según el plan del usuario
+        var databaseLimitPerEngine = user.Plan?.DatabaseLimitPerEngine ?? 2;
+>>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
 
         if (user == null)
         {
@@ -164,10 +220,19 @@ public class DatabasesController : ControllerBase
         
         var currentDbCount = await _context.DatabaseInstances
             .CountAsync(db => db.UserId == userId && db.Engine == createDto.Engine);
+<<<<<<< HEAD
         
         if (currentDbCount >= planLimit)
         {
             return BadRequest(new { message = $"Has alcanzado el límite de {planLimit} bases de datos para el motor {createDto.Engine} en tu plan '{planName}'." });
+=======
+
+        // Si el conteo es igual o mayor al límite, rechazamos la petición.
+        if (currentDbCount >= databaseLimitPerEngine)
+        {
+            var planName = user.Plan?.Name ?? "Gratuito";
+            return BadRequest(new { message = $"Has alcanzado el límite de {databaseLimitPerEngine} bases de datos para el motor {createDto.Engine} en tu plan {planName}. Mejora tu plan para crear más bases de datos." });
+>>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
         }
    
         try
