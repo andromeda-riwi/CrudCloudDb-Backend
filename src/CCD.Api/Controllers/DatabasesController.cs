@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-=======
-﻿// --- Imports necesarios ---
->>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core; 
@@ -96,9 +92,6 @@ public class DatabasesController : ControllerBase
             return Unauthorized();
         }
         var userId = Guid.Parse(userIdString);
-<<<<<<< HEAD
-        
-=======
 
         // 2. Obtener el usuario con su plan
         var user = await _context.Users
@@ -111,23 +104,10 @@ public class DatabasesController : ControllerBase
         }
 
         // 3. Obtener todas las bases de datos del usuario
->>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
         var databases = await _context.DatabaseInstances
             .Where(db => db.UserId == userId)
             .AsNoTracking()
             .ToListAsync();
-<<<<<<< HEAD
-        
-        var databasesByEngine = databases
-            .GroupBy(db => db.Engine)
-            .ToDictionary(g => g.Key, g => g.Count());
-        
-        var currentPlan = "Básico";
-        var maxDatabases = 10; 
-        var monthlyPrice = 0; 
-
-        
-=======
 
         // 4. Calcular estadísticas por motor
         var databasesByEngine = databases
@@ -145,7 +125,6 @@ public class DatabasesController : ControllerBase
         var maxTotalDatabases = maxDatabasesPerEngine * availableEngines;
 
         // 6. Retornar estadísticas
->>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
         return Ok(new
         {
             totalDatabases = databases.Count,
@@ -158,7 +137,7 @@ public class DatabasesController : ControllerBase
         });
     }
 
-  
+
     [HttpPost]
     public async Task<IActionResult> CreateDatabase(DatabaseCreateDto createDto)
     {
@@ -188,12 +167,6 @@ public class DatabasesController : ControllerBase
             return BadRequest(new { message = $"Zona horaria '{createDto.TimeZoneId}' no es válida." });
         }
 
-<<<<<<< HEAD
-       
-        var user = await _context.Users
-            .Include(u => u.Plan) 
-            .FirstOrDefaultAsync(u => u.Id == userId);
-=======
         // --- LÓGICA DE VALIDACIÓN DE CUOTAS ---
         // Obtener el usuario con su plan para validar límites
         var user = await _context.Users
@@ -207,32 +180,15 @@ public class DatabasesController : ControllerBase
 
         // Obtener el límite de bases de datos por motor según el plan del usuario
         var databaseLimitPerEngine = user.Plan?.DatabaseLimitPerEngine ?? 2;
->>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
+        var planName = user.Plan?.Name ?? "Gratuito";
 
-        if (user == null)
-        {
-            return Unauthorized(new { message = "Usuario no encontrado." });
-        }
-        
-        var planLimit = user.Plan.DatabaseLimitPerEngine;
-        var planName = user.Plan.Name;
-
-        
         var currentDbCount = await _context.DatabaseInstances
             .CountAsync(db => db.UserId == userId && db.Engine == createDto.Engine);
-<<<<<<< HEAD
-        
-        if (currentDbCount >= planLimit)
-        {
-            return BadRequest(new { message = $"Has alcanzado el límite de {planLimit} bases de datos para el motor {createDto.Engine} en tu plan '{planName}'." });
-=======
 
         // Si el conteo es igual o mayor al límite, rechazamos la petición.
         if (currentDbCount >= databaseLimitPerEngine)
         {
-            var planName = user.Plan?.Name ?? "Gratuito";
             return BadRequest(new { message = $"Has alcanzado el límite de {databaseLimitPerEngine} bases de datos para el motor {createDto.Engine} en tu plan {planName}. Mejora tu plan para crear más bases de datos." });
->>>>>>> a9e68670a5dc89e2128cddadaa203fed88386d58
         }
    
         try
