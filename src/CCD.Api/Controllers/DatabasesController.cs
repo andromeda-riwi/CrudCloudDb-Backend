@@ -1,4 +1,4 @@
-﻿// --- Imports necesarios ---
+﻿﻿// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core; // Para usar la entidad DatabaseInstance
@@ -294,6 +294,64 @@ public class DatabasesController : ControllerBase
             return StatusCode(500, new
             {
                 message = "No se pudo crear la base de datos.",
+                detail = ex.Message
+            });
+        }
+    }
+
+    // --- ENDPOINT PARA OBTENER CREDENCIALES DE UNA BASE DE DATOS ---
+    // Responde a peticiones GET en /api/databases/{id}/credentials
+    [HttpGet("{id}/credentials")]
+    public async Task<IActionResult> GetDatabaseCredentials(Guid id)
+    {
+        // 1. Obtener el ID del usuario del token para seguridad.
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdString == null) return Unauthorized();
+        var userId = Guid.Parse(userIdString);
+
+        // 2. Buscar la instancia de la base de datos en nuestra DB de gestión.
+        var dbInstance = await _context.DatabaseInstances
+            .FirstOrDefaultAsync(db => db.Id == id);
+
+        // 3. Validaciones de seguridad
+        if (dbInstance == null)
+        {
+            return NotFound(new { message = "Base de datos no encontrada." });
+        }
+        if (dbInstance.UserId != userId)
+        {
+            return Forbid(); // La base de datos no pertenece a este usuario
+        }
+
+        // 4. Obtener las credenciales de conexión del provisionador
+        try
+        {
+            var credentials = await _databaseProvisioner.GetDatabaseCredentialsAsync(
+                dbInstance.Engine,
+                dbInstance.Name,
+                dbInstance.DbUsername
+            );
+
+            if (credentials == null)
+            {
+                return StatusCode(500, new { message = "No se pudieron obtener las credenciales." });
+            }
+
+            return Ok(new
+            {
+                host = credentials.Host,
+                port = credentials.Port,
+                databaseName = credentials.DatabaseName,
+                username = credentials.Username,
+                password = credentials.Password
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener credenciales para la base de datos {DatabaseId}", id);
+            return StatusCode(500, new
+            {
+                message = "Error al obtener las credenciales.",
                 detail = ex.Message
             });
         }
