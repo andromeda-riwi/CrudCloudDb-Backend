@@ -18,13 +18,17 @@ vs/
 *.log
 
 # ## ¡SECRETS! ##
-appsettings.json
-appsettings.*.json
+# Se ignoran configuraciones con secretos reales. El `appsettings.json` sanitizado sí se versiona.
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
+!appsettings.json
 !appsettings.Development.json.example
 
 # Variables de entorno
 .env
 *.env
+!.env.example
 
 # Archivos de configuración local
 local.settings.json

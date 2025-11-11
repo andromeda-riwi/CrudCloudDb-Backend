@@ -1,11 +1,44 @@
-version: '3.8'
+   version: '3.8'
 
-services:
-  api:
-    build:
-      context: .
-      dockerfile: ./src/CCD.Api/Dockerfile
-    container_name: ccd_api
-    restart: unless-stopped
-    ports:
-      - "8082:8080"
+   services:
+     api:
+       container_name: ccd_api
+       build:
+         context: .
+         dockerfile: ./src/CCD.Api/Dockerfile
+       restart: unless-stopped
+       ports:
+         - "127.0.0.1:8082:8080"
+       environment:
+         ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+         ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:8080}
+
+         ConnectionStrings__DefaultConnection: ${DEFAULT_CONNECTION:?DEFAULT_CONNECTION no definido}
+         ConnectionStrings__AdminPostgresConnection: ${ADMIN_POSTGRES_CONNECTION:?ADMIN_POSTGRES_CONNECTION no definido}
+         ConnectionStrings__AdminMySqlConnection: ${ADMIN_MYSQL_CONNECTION:?ADMIN_MYSQL_CONNECTION no definido}
+         ConnectionStrings__AdminSqlServerConnection: ${ADMIN_SQLSERVER_CONNECTION:?ADMIN_SQLSERVER_CONNECTION no definido}
+
+         AppSettings__Token: ${JWT_SECRET_TOKEN:?JWT_SECRET_TOKEN no definido}
+
+         MercadoPago__AccessToken: ${MERCADOPAGO_ACCESS_TOKEN:?MERCADOPAGO_ACCESS_TOKEN no definido}
+         MercadoPago__WebhookSecret: ${MERCADOPAGO_WEBHOOK_SECRET:?MERCADOPAGO_WEBHOOK_SECRET no definido}
+
+         SendGrid__ApiKey: ${SENDGRID_API_KEY:-}
+         SendGrid__FromEmail: ${SENDGRID_FROM_EMAIL:-no-reply@example.com}
+         SendGrid__FromName: ${SENDGRID_FROM_NAME:-ApexDb Team}
+
+         App__DashboardUrl: ${APP_DASHBOARD_URL:-https://andromeda.andrescortes.dev/dashboard}
+       volumes:
+         - ./logs:/app/logs
+       networks:
+         - ccd_network
+       healthcheck:
+         test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/swagger/index.html"]
+         interval: 30s
+         timeout: 10s
+         retries: 3
+         start_period: 40s
+
+   networks:
+     ccd_network:
+       driver: bridge
