@@ -1,0 +1,35 @@
+# ## Archivos y carpetas generados por IDEs (Rider, Visual Studio) ##
+.idea/
+vs/
+
+# ## Carpetas de compilación de .NET ##
+[Bb]in/
+[Oo]bj/
+
+# ## Archivos de configuración de usuario ##
+*.suo
+*.user
+
+# ## Archivos de publicación ##
+[Pp]ublish/
+[Rr]elease/
+
+# ## Archivos de log y temporales ##
+*.log
+
+# ## ¡SECRETS! ##
+# Se ignoran configuraciones con secretos reales. El `appsettings.json` sanitizado sí se versiona.
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
+!appsettings.json
+!appsettings.Development.json.example
+
+# Variables de entorno
+.env
+*.env
+!.env.example
+
+# Archivos de configuración local
+local.settings.json
+secrets.json
