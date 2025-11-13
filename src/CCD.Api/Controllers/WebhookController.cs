@@ -2,15 +2,15 @@ using CCD.Core.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
-using System.Security.Cryptography; // <--- Añade esto
-using System.Text;                 // <--- Añade esto
+using System.Security.Cryptography; //to improve the security 
+using System.Text;               
 using Microsoft.Extensions.Primitives; 
 
 [Route("api/[controller]")]
 [ApiController]
 public class WebhookController : ControllerBase
 {
-    private readonly IPaymentService _paymentService;
+    private readonly IPaymentService _paymentService; //Mercado pago IPaymentService
     private readonly ILogger<WebhookController> _logger;
     private readonly IConfiguration _configuration; // IConfiguration
 
@@ -50,7 +50,6 @@ public class WebhookController : ControllerBase
         }
         
         // manifest of the mercado pago payment
-        var requestTimestamp = Request.Headers["X-Request-Timestamp"].ToString();
         var manifest = $"id:{body.GetProperty("data").GetProperty("id").GetString()};request-id:{Request.Headers["X-Request-Id"]};ts:{timestamp};";
 
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(webhookSecret));

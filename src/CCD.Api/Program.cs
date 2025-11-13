@@ -2,23 +2,23 @@ using System.Text;
 using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
 using CCD.Infrastructure.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.JwtBearer; //to add authentication of the API with JWTBearer
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using MercadoPago.Config;
+using Microsoft.IdentityModel.Tokens;  //to get the tokens to authentication in the login 
+using MercadoPago.Config; //config of mercado pago.. webhooks and etc
 
 var builder = WebApplication.CreateBuilder(args);
 
 
-var mercadoPagoAccessToken = builder.Configuration["MercadoPago:AccessToken"];
+var mercadoPagoAccessToken = builder.Configuration["MercadoPago:AccessToken"]; //create a configuration of the mercado pago token
 if (string.IsNullOrEmpty(mercadoPagoAccessToken))
 {
     throw new Exception("El Access Token de Mercado Pago no está configurado. Asegúrate de definir la variable de entorno 'MercadoPago__AccessToken'.");
 }
-MercadoPagoConfig.AccessToken = mercadoPagoAccessToken;
+MercadoPagoConfig.AccessToken = mercadoPagoAccessToken; //storage in the mercado pago var the access token
 
 
-var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
+var MyAllowSpecificOrigins = "_myAllowSpecificOrigins"; //cors configuration
 
 
 builder.Services.AddCors(options =>
@@ -28,13 +28,13 @@ builder.Services.AddCors(options =>
                       {
                           policy.WithOrigins("http://localhost:5173",
                                            "http://localhost:8080",
-                                           "https://andromeda.andrescortes.dev")
+                                           "https://andromeda.andrescortes.dev") //cors configuration and polities
                                 .AllowAnyHeader()
                                 .AllowAnyMethod();
                       });
 });
 
-// 2. Configuración de la base de datos
+// 2. Configuración de la base de datos 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -45,14 +45,14 @@ builder.Services.AddScoped<IEmailService, SendGridEmailService>();
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IDatabaseProvisioner, DatabaseProvisioner>();
 // A medida que crees más servicios (pagos, correos), los registrarás aquí.
-builder.Services.AddScoped<IPaymentService, PaymentService>(); 
+builder.Services.AddScoped<IPaymentService, PaymentService>(); //Mercado pago Ipayment services 
 // 4. Configuración de los Controladores de la API
 builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme //configuration of the jwtbearer and authorization
     {
         Name = "Authorization",
         Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
@@ -83,7 +83,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         var tokenKeyString = builder.Configuration.GetSection("AppSettings:Token").Value;
         
-        if (string.IsNullOrEmpty(tokenKeyString))
+        if (string.IsNullOrEmpty(tokenKeyString)) //expected error
             throw new Exception("La clave del token 'AppSettings:Token' no está configurada.");
 
         options.TokenValidationParameters = new TokenValidationParameters
@@ -99,16 +99,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 var app = builder.Build();
 
 
-app.UseSwagger();
+app.UseSwagger(); //to use swagger and make endpoints with interface in the web
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "CCD API v1");
     c.RoutePrefix = string.Empty; 
 });
 
-app.UseHttpsRedirection();
+app.UseHttpsRedirection(); //to use https
 
-app.UseCors(MyAllowSpecificOrigins);
+app.UseCors(MyAllowSpecificOrigins); //to use cors
 
 app.UseAuthentication();
 
@@ -116,4 +116,4 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.Run();
+app.Run(); //run the application
