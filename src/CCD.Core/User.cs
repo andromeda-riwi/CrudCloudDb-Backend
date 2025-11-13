@@ -10,6 +10,15 @@ public class User
     public byte[] PasswordHash { get; set; } = Array.Empty<byte>();
     public byte[] PasswordSalt { get; set; } = Array.Empty<byte>();
 
+    // Verificación de email
+    public bool EmailVerified { get; set; } = false;
+    public string? EmailVerificationToken { get; set; }
+    public DateTime? EmailVerificationTokenExpiry { get; set; }
+
+    // Recuperación de contraseña
+    public string? PasswordResetToken { get; set; }
+    public DateTime? PasswordResetTokenExpiry { get; set; }
+
     // Relación con el Plan
     public int PlanId { get; set; } = 1; // Foreign Key
     public Plan Plan { get; set; } = null!; // Navigation Property

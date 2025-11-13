@@ -15,4 +15,15 @@ public interface IAuthRepository
     Task<string?> Login(string identifier, string password, bool isEmail = true);
 
     Task<bool> UserExists(string email);
+    
+    // Verificación de email
+    Task<string> GenerateEmailVerificationTokenAsync(Guid userId);
+    Task<bool> VerifyEmailAsync(string token);
+    Task<bool> IsEmailVerifiedAsync(Guid userId);
+    
+    // Recuperación de contraseña
+    Task<string?> GeneratePasswordResetTokenAsync(string email);
+    Task<bool> ResetPasswordAsync(string token, string newPassword);
+    Task<User?> GetUserByEmailAsync(string email);
+    Task<User?> GetUserByUserNameAsync(string userName);
 }
