@@ -1,8 +1,8 @@
 ﻿﻿// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
-using CCD.Core; // Para usar la entidad DatabaseInstance
-using CCD.Core.Interfaces; // Para usar IDatabaseProvisioner e IEmailService
+using CCD.Core; 
+using CCD.Core.Interfaces; 
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +11,7 @@ using TimeZoneConverter;
 
 [Authorize]
 [ApiController]
-[Route("api/[controller]")] // Ruta base: /api/databases
+[Route("api/[controller]")] 
 public class DatabasesController : ControllerBase
 {
     private readonly IConfiguration _config;
@@ -19,8 +19,7 @@ public class DatabasesController : ControllerBase
     private readonly IDatabaseProvisioner _databaseProvisioner;
     private readonly IEmailService _emailService;
     private readonly ILogger<DatabasesController> _logger;
-
-    // Inyectamos el DbContext para interactuar con nuestra base de datos de gestión.
+    
     public DatabasesController(
         IConfiguration config,
         ApplicationDbContext context,
@@ -34,27 +33,22 @@ public class DatabasesController : ControllerBase
         _emailService = emailService;
         _logger = logger;
     }
-
-    // --- ENDPOINT PARA LISTAR BASES DE DATOS ---
-    // Responde a peticiones GET en /api/databases
+    
     [HttpGet]
     public async Task<IActionResult> GetDatabasesForUser()
     {
-        // 1. Obtenemos el ID del usuario directamente desde los claims del token JWT.
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdString == null)
         {
-            return Unauthorized(); // Seguridad extra, aunque [Authorize] ya lo previene.
+            return Unauthorized(); 
         }
         var userId = Guid.Parse(userIdString);
-
-        // 2. Buscamos las bases de datos del usuario.
+        
         var databases = await _context.DatabaseInstances
             .Where(db => db.UserId == userId)
             .AsNoTracking()
             .ToListAsync();
-
-        // 3. Convertimos cada resultado a un DTO aplicando la zona horaria almacenada.
+        
         var response = databases.Select(db =>
         {
             TimeZoneInfo timeZone;
@@ -85,16 +79,14 @@ public class DatabasesController : ControllerBase
             };
         }).ToList();
 
-        // 4. Devolvemos la lista de bases de datos.
+       
         return Ok(response);
     }
 
-    // --- ENDPOINT PARA OBTENER ESTADÍSTICAS DEL DASHBOARD ---
-    // Responde a peticiones GET en /api/databases/stats
+
     [HttpGet("stats")]
     public async Task<IActionResult> GetDashboardStats()
     {
-        // 1. Obtenemos el ID del usuario del token.
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdString == null)
         {
@@ -146,12 +138,11 @@ public class DatabasesController : ControllerBase
         });
     }
 
-    // --- ENDPOINT PARA CREAR UNA NUEVA BASE DE DATOS ---
-    // Responde a peticiones POST en /api/databases
+
     [HttpPost]
     public async Task<IActionResult> CreateDatabase(DatabaseCreateDto createDto)
     {
-        // 1. Obtenemos el ID del usuario del token.
+        
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdString == null)
         {
@@ -190,25 +181,20 @@ public class DatabasesController : ControllerBase
 
         // Obtener el límite de bases de datos por motor según el plan del usuario
         var databaseLimitPerEngine = user.Plan?.DatabaseLimitPerEngine ?? 2;
+        var planName = user.Plan?.Name ?? "Gratuito";
 
-        // Contamos cuántas bases de datos del motor solicitado ya tiene el usuario.
         var currentDbCount = await _context.DatabaseInstances
             .CountAsync(db => db.UserId == userId && db.Engine == createDto.Engine);
 
         // Si el conteo es igual o mayor al límite, rechazamos la petición.
         if (currentDbCount >= databaseLimitPerEngine)
         {
-            var planName = user.Plan?.Name ?? "Gratuito";
             return BadRequest(new { message = $"Has alcanzado el límite de {databaseLimitPerEngine} bases de datos para el motor {createDto.Engine} en tu plan {planName}. Mejora tu plan para crear más bases de datos." });
         }
-        // --- FIN DE LA LÓGICA DE CUOTAS ---
-
-
-        // --- LÓGICA DE APROVISIONAMIENTO ---
-        // Aquí es donde realmente creamos la base de datos en PostgreSQL
+   
         try
         {
-            // PASO 1: Llamar al servicio que crea la base de datos real
+            
             var connectionDetails = await _databaseProvisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
             if (connectionDetails == null)
@@ -216,7 +202,7 @@ public class DatabasesController : ControllerBase
                 return StatusCode(500, new { message = "Error inesperado al crear la base de datos." });
             }
 
-            // Validar que los campos obligatorios no sean nulos
+            
             if (string.IsNullOrEmpty(connectionDetails.DatabaseName) ||
                 string.IsNullOrEmpty(createDto.Engine) ||
                 string.IsNullOrEmpty(connectionDetails.Username))
@@ -224,22 +210,21 @@ public class DatabasesController : ControllerBase
                 return StatusCode(500, new { message = "Error: No se pudieron generar todas las credenciales necesarias." });
             }
 
-            // PASO 2: Guardar el registro en nuestra base de datos de gestión
+            
             var newDbInstance = new DatabaseInstance
             {
-                Name = connectionDetails.DatabaseName,  // Nombre generado automáticamente
-                Engine = createDto.Engine,              // Motor solicitado (PostgreSQL, MySQL, etc.)
-                Status = "Active",                      // Estado inicial: activa
-                DbUsername = connectionDetails.Username, // Usuario de la base de datos
-                UserId = userId,                        // Asociar al usuario actual
+                Name = connectionDetails.DatabaseName,  
+                Engine = createDto.Engine,              
+                Status = "Active",                      
+                DbUsername = connectionDetails.Username, 
+                UserId = userId,                       
                 CreatedAt = DateTime.UtcNow,
                 TimeZoneId = normalizedTimeZoneId
             };
 
             await _context.DatabaseInstances.AddAsync(newDbInstance);
             await _context.SaveChangesAsync();
-
-            // PASO 3: Enviar correo electrónico con las credenciales
+            
             try
             {
                 var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
@@ -262,7 +247,7 @@ public class DatabasesController : ControllerBase
                 _logger.LogError(ex, "Error al enviar correo con credenciales");
             }
 
-            // Validar que las credenciales no sean nulas
+           
             if (connectionDetails.Host == null || connectionDetails.Username == null || connectionDetails.Password == null)
             {
                 _logger.LogError("No se pudieron obtener todas las credenciales de conexión");
@@ -280,7 +265,6 @@ public class DatabasesController : ControllerBase
                 CreatedAt = createdAtLocal,
                 CreatedAtUtc = newDbInstance.CreatedAt,
                 TimeZoneId = newDbInstance.TimeZoneId,
-                // Incluir credenciales solo para la respuesta de creación
                 Host = connectionDetails.Host,
                 Port = connectionDetails.Port,
                 Username = connectionDetails.Username,
@@ -362,26 +346,22 @@ public class DatabasesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteDatabase(Guid id)
     {
-        // 1. Obtener el ID del usuario del token para seguridad.
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdString == null) return Unauthorized();
         var userId = Guid.Parse(userIdString);
-
-        // 2. Buscar la instancia de la base de datos en nuestra DB de gestión.
+        
         var dbInstance = await _context.DatabaseInstances
             .FirstOrDefaultAsync(db => db.Id == id);
-
-        // 3. Validaciones de seguridad
+        
         if (dbInstance == null)
         {
-            return NotFound(); // La base de datos no existe
+            return NotFound(); 
         }
         if (dbInstance.UserId != userId)
         {
-            return Forbid(); // La base de datos no pertenece a este usuario
+            return Forbid(); 
         }
-
-        // Llamar al servicio para eliminar la base de datos y el usuario del servidor real
+        
         try
         {
             var deleted = await _databaseProvisioner.DeleteDatabaseAsync(
