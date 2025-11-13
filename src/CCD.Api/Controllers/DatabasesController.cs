@@ -1,3 +1,4 @@
+﻿// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core; 
@@ -120,8 +121,8 @@ public class DatabasesController : ControllerBase
         var monthlyPrice = user.Plan?.Price ?? 0;
 
         // Calcular el número de motores disponibles (PostgreSQL, MySQL, MongoDB, etc.)
-        // Por ahora, asumimos 3 motores principales
-        const int availableEngines = 6; // PostgreSQL, MySQL, MongoDB, MariaDB, Redis, SQLite
+        // Por ahora, asumimos 4 motores principales
+        const int availableEngines = 4; // PostgreSQL, MySQL, MongoDB, SQLServer
         var maxTotalDatabases = maxDatabasesPerEngine * availableEngines;
 
         // 6. Retornar estadísticas
@@ -282,7 +283,66 @@ public class DatabasesController : ControllerBase
         }
     }
 
-   
+    // --- ENDPOINT PARA OBTENER CREDENCIALES DE UNA BASE DE DATOS ---
+    // Responde a peticiones GET en /api/databases/{id}/credentials
+    [HttpGet("{id}/credentials")]
+    public async Task<IActionResult> GetDatabaseCredentials(Guid id)
+    {
+        // 1. Obtener el ID del usuario del token para seguridad.
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdString == null) return Unauthorized();
+        var userId = Guid.Parse(userIdString);
+
+        // 2. Buscar la instancia de la base de datos en nuestra DB de gestión.
+        var dbInstance = await _context.DatabaseInstances
+            .FirstOrDefaultAsync(db => db.Id == id);
+
+        // 3. Validaciones de seguridad
+        if (dbInstance == null)
+        {
+            return NotFound(new { message = "Base de datos no encontrada." });
+        }
+        if (dbInstance.UserId != userId)
+        {
+            return Forbid(); // La base de datos no pertenece a este usuario
+        }
+
+        // 4. Obtener las credenciales de conexión del provisionador
+        try
+        {
+            var credentials = await _databaseProvisioner.GetDatabaseCredentialsAsync(
+                dbInstance.Engine,
+                dbInstance.Name,
+                dbInstance.DbUsername
+            );
+
+            if (credentials == null)
+            {
+                return StatusCode(500, new { message = "No se pudieron obtener las credenciales." });
+            }
+
+            return Ok(new
+            {
+                host = credentials.Host,
+                port = credentials.Port,
+                databaseName = credentials.DatabaseName,
+                username = credentials.Username,
+                password = credentials.Password
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener credenciales para la base de datos {DatabaseId}", id);
+            return StatusCode(500, new
+            {
+                message = "Error al obtener las credenciales.",
+                detail = ex.Message
+            });
+        }
+    }
+
+    // --- ENDPOINT PARA ELIMINAR UNA BASE DE DATOS ---
+    // Responde a peticiones DELETE en /api/databases/some-guid-id
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteDatabase(Guid id)
     {
@@ -326,6 +386,33 @@ public class DatabasesController : ControllerBase
 
         _context.DatabaseInstances.Remove(dbInstance);
         await _context.SaveChangesAsync();
+
+        // Enviar correo de notificación de eliminación
+        try
+        {
+            var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+            var userName = User.FindFirst(ClaimTypes.Name)?.Value ?? "Usuario";
+            
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                await _emailService.SendDatabaseDeletionEmailAsync(
+                    userEmail,
+                    userName,
+                    dbInstance.Name,
+                    dbInstance.Engine);
+
+                _logger.LogInformation($"Correo de eliminación enviado a {userEmail}");
+            }
+            else
+            {
+                _logger.LogWarning("No se pudo obtener el correo del usuario para enviar notificación de eliminación");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar correo de notificación de eliminación");
+            // No fallar la eliminación si el correo no se puede enviar
+        }
 
         return NoContent();
     }

@@ -236,7 +236,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         // 3. Conectarse al servidor SQL Server
         await using var connection = new SqlConnection(adminConnectionString);
         await connection.OpenAsync();
-        
+
         // 4. Ejecutar comandos SQL para crear base de datos y usuario
         // Crear la base de datos
         var createDbCommand = $"CREATE DATABASE [{dbName}];";
@@ -556,5 +556,136 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Console.WriteLine(ex.StackTrace);
             return false;
         }
+    }
+    
+    public async Task<DatabaseConnectionDetails?> GetDatabaseCredentialsAsync(string engine, string databaseName, string username)
+    {
+        var engineLower = engine.ToLower();
+        
+        try
+        {
+            if (engineLower == "postgresql")
+            {
+                return await GetPostgreSqlCredentialsAsync(databaseName, username);
+            }
+            else if (engineLower == "mysql")
+            {
+                return await GetMySqlCredentialsAsync(databaseName, username);
+            }
+            else if (engineLower == "sqlserver")
+            {
+                return await GetSqlServerCredentialsAsync(databaseName, username);
+            }
+            else
+            {
+                throw new NotImplementedException($"El motor de base de datos '{engine}' no es soportado.");
+            }
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private async Task<DatabaseConnectionDetails?> GetPostgreSqlCredentialsAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminPostgresConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return null;
+        }
+
+        await using var connection = new NpgsqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+
+        // Verificar que la base de datos existe
+        var checkDbCommand = $"SELECT 1 FROM pg_database WHERE datname = '{databaseName}';";
+        await using (var cmd = new NpgsqlCommand(checkDbCommand, connection))
+        {
+            var result = await cmd.ExecuteScalarAsync();
+            if (result == null)
+            {
+                return null;
+            }
+        }
+
+        // Retornar las credenciales (la contraseña no se puede recuperar, así que mostramos un mensaje)
+        return new DatabaseConnectionDetails
+        {
+            Host = connection.Host,
+            Port = connection.Port,
+            DatabaseName = databaseName,
+            Username = username,
+            Password = "******",
+            Engine = "PostgreSQL"
+        };
+    }
+
+    private async Task<DatabaseConnectionDetails?> GetMySqlCredentialsAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMySqlConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return null;
+        }
+
+        await using var connection = new MySqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+
+        // Verificar que la base de datos existe
+        var checkDbCommand = $"SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{databaseName}';";
+        await using (var cmd = new MySqlCommand(checkDbCommand, connection))
+        {
+            var result = await cmd.ExecuteScalarAsync();
+            if (result == null)
+            {
+                return null;
+            }
+        }
+
+        // Retornar las credenciales
+        return new DatabaseConnectionDetails
+        {
+            Host = connection.DataSource.Split(':')[0],
+            Port = 3306,
+            DatabaseName = databaseName,
+            Username = username,
+            Password = "******",
+            Engine = "MySQL"
+        };
+    }
+
+    private async Task<DatabaseConnectionDetails?> GetSqlServerCredentialsAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminSqlServerConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return null;
+        }
+
+        await using var connection = new SqlConnection(adminConnectionString);
+        await connection.OpenAsync();
+
+        // Verificar que la base de datos existe
+        var checkDbCommand = $"SELECT name FROM sys.databases WHERE name = '{databaseName}';";
+        await using (var cmd = new SqlCommand(checkDbCommand, connection))
+        {
+            var result = await cmd.ExecuteScalarAsync();
+            if (result == null)
+            {
+                return null;
+            }
+        }
+
+        // Retornar las credenciales
+        return new DatabaseConnectionDetails
+        {
+            Host = connection.DataSource.Split(',')[0],
+            Port = 1433,
+            DatabaseName = databaseName,
+            Username = username,
+            Password = "******",
+            Engine = "SQL Server"
+        };
     }
 }
