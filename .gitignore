@@ -33,3 +33,13 @@ appsettings.*.local.json
 # Archivos de configuración local
 local.settings.json
 secrets.json
+
+
+
+# Archivos SQL temporales de verificación
+verificar-columnas.sql
+
+# Logs temporales
+/tmp/
+*.tmp
+backend.log

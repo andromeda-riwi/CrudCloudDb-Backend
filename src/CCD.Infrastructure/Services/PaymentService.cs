@@ -4,6 +4,7 @@ using CCD.Infrastructure.Data;
 using MercadoPago.Client.Payment;
 using MercadoPago.Client.Preference;
 using MercadoPago.Resource.Preference;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging; 
 
 namespace CCD.Infrastructure.Services;
@@ -11,12 +12,14 @@ namespace CCD.Infrastructure.Services;
 public class PaymentService : IPaymentService
 {
     private readonly ApplicationDbContext _context;
-    private readonly ILogger<PaymentService> _logger; 
+    private readonly ILogger<PaymentService> _logger;
+    private readonly IEmailService _emailService;
     
-    public PaymentService(ApplicationDbContext context, ILogger<PaymentService> logger)
+    public PaymentService(ApplicationDbContext context, ILogger<PaymentService> logger, IEmailService emailService)
     {
         _context = context;
         _logger = logger;
+        _emailService = emailService;
     }
     
     public async Task<CreatePreferenceResponseDto?> CreatePreferenceAsync(int planId, Guid userId)
@@ -99,12 +102,44 @@ public class PaymentService : IPaymentService
                     return;
                 }
 
-                var user = await _context.Users.FindAsync(userId);
+                var user = await _context.Users
+                    .Include(u => u.Plan)
+                    .FirstOrDefaultAsync(u => u.Id == userId);
+                    
                 if (user != null)
                 {
+                    var oldPlanId = user.PlanId;
+                    var oldPlan = await _context.Plans.FindAsync(oldPlanId);
+                    var oldPlanName = oldPlan?.Name ?? "Desconocido";
+                    
+                    var newPlan = await _context.Plans.FindAsync(planId);
+                    if (newPlan == null)
+                    {
+                        _logger.LogError("El plan {PlanId} no existe.", planId);
+                        return;
+                    }
+                    
                     user.PlanId = planId;
                     await _context.SaveChangesAsync();
                     _logger.LogInformation("El usuario {UserId} ha sido actualizado al plan {PlanId} exitosamente.", userId, planId);
+                    
+                    // Enviar correo de notificación de cambio de plan
+                    try
+                    {
+                        await _emailService.SendPlanChangeEmailAsync(
+                            user.Email,
+                            user.UserName,
+                            oldPlanName,
+                            newPlan.Name,
+                            newPlan.Price);
+                        
+                        _logger.LogInformation($"Correo de cambio de plan enviado a {user.Email}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al enviar correo de cambio de plan");
+                        // No fallar el cambio de plan si el correo no se puede enviar
+                    }
                 }
                 else
                 {

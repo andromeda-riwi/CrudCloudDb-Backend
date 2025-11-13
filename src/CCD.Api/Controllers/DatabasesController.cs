@@ -387,6 +387,33 @@ public class DatabasesController : ControllerBase
         _context.DatabaseInstances.Remove(dbInstance);
         await _context.SaveChangesAsync();
 
+        // Enviar correo de notificación de eliminación
+        try
+        {
+            var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+            var userName = User.FindFirst(ClaimTypes.Name)?.Value ?? "Usuario";
+            
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                await _emailService.SendDatabaseDeletionEmailAsync(
+                    userEmail,
+                    userName,
+                    dbInstance.Name,
+                    dbInstance.Engine);
+
+                _logger.LogInformation($"Correo de eliminación enviado a {userEmail}");
+            }
+            else
+            {
+                _logger.LogWarning("No se pudo obtener el correo del usuario para enviar notificación de eliminación");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar correo de notificación de eliminación");
+            // No fallar la eliminación si el correo no se puede enviar
+        }
+
         return NoContent();
     }
 }

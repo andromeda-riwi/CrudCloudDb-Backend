@@ -66,6 +66,19 @@ public class AuthRepository : IAuthRepository
 
             Console.WriteLine($"[AuthRepo] Usuario guardado exitosamente: {user.Email}");
             
+            // Generar token de verificación y enviar correo
+            try
+            {
+                var verificationToken = await GenerateEmailVerificationTokenAsync(user.Id);
+                await _emailService.SendEmailVerificationAsync(user.Email, user.UserName, verificationToken);
+                _logger.LogInformation($"Correo de verificación enviado a {user.Email}");
+            }
+            catch (Exception ex)
+            {
+                // No fallar el registro si el correo no se puede enviar
+                _logger.LogError(ex, $"Error al enviar correo de verificación a {user.Email}");
+            }
+            
             // Enviar correo de bienvenida
             try
             {
@@ -130,6 +143,14 @@ public class AuthRepository : IAuthRepository
         }
 
         Console.WriteLine($"[AuthRepo] Password correcto. Generando token para: {identifier}");
+        
+        // Verificar si el email está verificado (opcional, no bloquea el login)
+        if (!user.EmailVerified)
+        {
+            _logger.LogWarning($"Usuario {user.Id} intentó iniciar sesión sin verificar email");
+            // Continuamos con el login, pero el frontend puede mostrar un aviso
+        }
+        
         string token = CreateToken(user);
         return token;
     }
@@ -192,5 +213,148 @@ public class AuthRepository : IAuthRepository
         var token = tokenHandler.CreateToken(tokenDescriptor);
 
         return tokenHandler.WriteToken(token);
+    }
+
+    // --- VERIFICACIÓN DE EMAIL ---
+
+    public async Task<string> GenerateEmailVerificationTokenAsync(Guid userId)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+        {
+            throw new Exception("Usuario no encontrado.");
+        }
+
+        // Generar token seguro
+        var token = Guid.NewGuid().ToString("N");
+        user.EmailVerificationToken = token;
+        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24); // Expira en 24 horas
+
+        await _context.SaveChangesAsync();
+        _logger.LogInformation($"Token de verificación generado para usuario {userId}");
+        
+        return token;
+    }
+
+    public async Task<bool> VerifyEmailAsync(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
+
+        if (user == null)
+        {
+            _logger.LogWarning($"Intento de verificación con token inválido: {token}");
+            return false;
+        }
+
+        // Verificar expiración
+        if (user.EmailVerificationTokenExpiry == null || user.EmailVerificationTokenExpiry < DateTime.UtcNow)
+        {
+            _logger.LogWarning($"Intento de verificación con token expirado para usuario {user.Id}");
+            // Limpiar token expirado
+            user.EmailVerificationToken = null;
+            user.EmailVerificationTokenExpiry = null;
+            await _context.SaveChangesAsync();
+            return false;
+        }
+
+        // Marcar email como verificado y limpiar token
+        user.EmailVerified = true;
+        user.EmailVerificationToken = null;
+        user.EmailVerificationTokenExpiry = null;
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation($"Email verificado exitosamente para usuario {user.Id}");
+        return true;
+    }
+
+    public async Task<bool> IsEmailVerifiedAsync(Guid userId)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        return user?.EmailVerified ?? false;
+    }
+
+    // --- RECUPERACIÓN DE CONTRASEÑA ---
+
+    public async Task<string?> GeneratePasswordResetTokenAsync(string email)
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+
+        if (user == null)
+        {
+            // Por seguridad, no revelamos si el email existe o no
+            _logger.LogWarning($"Intento de recuperación de contraseña para email no encontrado: {email}");
+            return null;
+        }
+
+        // Generar token seguro
+        var token = Guid.NewGuid().ToString("N");
+        user.PasswordResetToken = token;
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1); // Expira en 1 hora
+
+        await _context.SaveChangesAsync();
+        _logger.LogInformation($"Token de recuperación generado para usuario {user.Id}");
+        
+        return token;
+    }
+
+    public async Task<bool> ResetPasswordAsync(string token, string newPassword)
+    {
+        if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(newPassword))
+        {
+            return false;
+        }
+
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.PasswordResetToken == token);
+
+        if (user == null)
+        {
+            _logger.LogWarning($"Intento de reseteo con token inválido: {token}");
+            return false;
+        }
+
+        // Verificar expiración
+        if (user.PasswordResetTokenExpiry == null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
+        {
+            _logger.LogWarning($"Intento de reseteo con token expirado para usuario {user.Id}");
+            // Limpiar token expirado
+            user.PasswordResetToken = null;
+            user.PasswordResetTokenExpiry = null;
+            await _context.SaveChangesAsync();
+            return false;
+        }
+
+        // Actualizar contraseña
+        CreatePasswordHash(newPassword, out byte[] passwordHash, out byte[] passwordSalt);
+        user.PasswordHash = passwordHash;
+        user.PasswordSalt = passwordSalt;
+        
+        // Limpiar token
+        user.PasswordResetToken = null;
+        user.PasswordResetTokenExpiry = null;
+        
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation($"Contraseña restablecida exitosamente para usuario {user.Id}");
+        return true;
+    }
+
+    public async Task<User?> GetUserByEmailAsync(string email)
+    {
+        return await _context.Users
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+    }
+
+    public async Task<User?> GetUserByUserNameAsync(string userName)
+    {
+        return await _context.Users
+            .FirstOrDefaultAsync(u => u.UserName.ToLower() == userName.ToLower());
     }
 }
