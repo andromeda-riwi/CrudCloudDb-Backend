@@ -1,4 +1,4 @@
-﻿﻿// --- Imports necesarios ---
+﻿// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core; 
@@ -121,8 +121,8 @@ public class DatabasesController : ControllerBase
         var monthlyPrice = user.Plan?.Price ?? 0;
 
         // Calcular el número de motores disponibles (PostgreSQL, MySQL, MongoDB, etc.)
-        // Por ahora, asumimos 3 motores principales
-        const int availableEngines = 6; // PostgreSQL, MySQL, MongoDB, MariaDB, Redis, SQLite
+        // Por ahora, asumimos 4 motores principales
+        const int availableEngines = 4; // PostgreSQL, MySQL, MongoDB, SQLServer
         var maxTotalDatabases = maxDatabasesPerEngine * availableEngines;
 
         // 6. Retornar estadísticas

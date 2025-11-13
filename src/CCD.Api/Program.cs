@@ -7,7 +7,22 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using MercadoPago.Config;
 
+// Cargar variables de entorno desde el archivo .env
+var envPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", ".env");
+if (File.Exists(envPath))
+{
+    DotNetEnv.Env.Load(envPath);
+    Console.WriteLine($"✅ Archivo .env cargado desde: {envPath}");
+}
+else
+{
+    Console.WriteLine($"⚠️ No se encontró el archivo .env en: {envPath}");
+}
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Sobrescribir la configuración con las variables de entorno cargadas
+builder.Configuration.AddEnvironmentVariables();
 
 
 var mercadoPagoAccessToken = builder.Configuration["MercadoPago:AccessToken"];

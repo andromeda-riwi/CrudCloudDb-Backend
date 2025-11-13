@@ -236,7 +236,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         // 3. Conectarse al servidor SQL Server
         await using var connection = new SqlConnection(adminConnectionString);
         await connection.OpenAsync();
-        
+
         // 4. Ejecutar comandos SQL para crear base de datos y usuario
         // Crear la base de datos
         var createDbCommand = $"CREATE DATABASE [{dbName}];";
