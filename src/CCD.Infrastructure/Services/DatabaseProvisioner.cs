@@ -4,6 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Npgsql;
 using MySql.Data.MySqlClient;
 using Microsoft.Data.SqlClient;
+using MongoDB.Bson;
+using MongoDB.Driver;
 
 namespace CCD.Infrastructure.Services;
 
@@ -30,6 +32,10 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         else if (engineLower == "sqlserver")
         {
             return await CreateSqlServerDatabaseAsync(userId);
+        }
+        else if (engineLower == "mongodb")
+        {
+            return await CreateMongoDatabaseAsync(userId);
         }
         else
         {
@@ -300,6 +306,76 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         };
     }
 
+    public async Task<DatabaseConnectionDetails> CreateMongoDatabaseAsync(Guid userId)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMongoConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            throw new InvalidOperationException(
+                "La cadena de conexión 'AdminMongoConnection' no está configurada. " +
+                "Esta conexión debe apuntar a un usuario administrador con permisos para crear bases de datos y usuarios."
+            );
+        }
+
+        var dbName = $"user_{userId.ToString().Substring(0, 8)}_{Guid.NewGuid().ToString().Substring(0, 4)}";
+        var dbUser = $"user_{Guid.NewGuid().ToString("N").Substring(0, 12)}";
+        var dbPassword = GenerateSecurePassword();
+
+        var client = new MongoClient(adminConnectionString);
+        var mongoUrl = new MongoUrl(adminConnectionString);
+        var targetDb = client.GetDatabase(dbName);
+
+        var tempCollection = targetDb.GetCollection<BsonDocument>("_temp_init");
+        await tempCollection.InsertOneAsync(new BsonDocument
+        {
+            { "_id", ObjectId.GenerateNewId() },
+            { "temp", true }
+        });
+
+        var createUserCommand = new BsonDocument
+        {
+            { "createUser", dbUser },
+            { "pwd", dbPassword },
+            {
+                "roles",
+                new BsonArray
+                {
+                    new BsonDocument { { "role", "readWrite" }, { "db", dbName } },
+                    new BsonDocument { { "role", "dbAdmin" }, { "db", dbName } }
+                }
+            }
+        };
+
+        await targetDb.RunCommandAsync<BsonDocument>(new BsonDocumentCommand<BsonDocument>(createUserCommand));
+        await targetDb.DropCollectionAsync("_temp_init");
+
+        var metadataCollection = targetDb.GetCollection<BsonDocument>("_metadata");
+        await metadataCollection.InsertOneAsync(new BsonDocument
+        {
+            { "_id", ObjectId.GenerateNewId() },
+            { "createdAt", DateTime.UtcNow },
+            { "createdBy", "CrudCloudDb" },
+            { "userId", userId.ToString() },
+            { "databaseName", dbName },
+            { "username", dbUser },
+            { "status", "Active" },
+            { "description", "Base de datos creada por CrudCloudDb" }
+        });
+
+        var host = mongoUrl.Server.Host;
+        var port = mongoUrl.Server.Port;
+
+        return new DatabaseConnectionDetails
+        {
+            Host = host,
+            Port = port > 0 ? port : 27017,
+            DatabaseName = dbName,
+            Username = dbUser,
+            Password = dbPassword,
+            Engine = "MongoDB"
+        };
+    }
+
     public async Task<bool> DeleteDatabaseAsync(string engine, string databaseName, string username)
     {
         var engineLower = engine.ToLower();
@@ -314,10 +390,14 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             {
                 return await DeleteMySqlDatabaseAsync(databaseName, username);
             }
-            else if (engineLower == "sqlserver")
+        else if (engineLower == "sqlserver")
             {
                 return await DeleteSqlServerDatabaseAsync(databaseName, username);
             }
+        else if (engineLower == "mongodb")
+        {
+            return await DeleteMongoDatabaseAsync(databaseName, username);
+        }
             else
             {
                 throw new NotImplementedException($"El motor de base de datos '{engine}' no es soportado.");
@@ -557,6 +637,38 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             return false;
         }
     }
+
+    public async Task<bool> DeleteMongoDatabaseAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMongoConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return false;
+        }
+
+        try
+        {
+            var client = new MongoClient(adminConnectionString);
+            var targetDb = client.GetDatabase(databaseName);
+
+            try
+            {
+                var dropUserCommand = new BsonDocument { { "dropUser", username } };
+                await targetDb.RunCommandAsync<BsonDocument>(new BsonDocumentCommand<BsonDocument>(dropUserCommand));
+            }
+            catch
+            {
+                // Si el usuario no existe continuamos con la eliminación de la base de datos
+            }
+
+            await client.DropDatabaseAsync(databaseName);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
     
     public async Task<DatabaseConnectionDetails?> GetDatabaseCredentialsAsync(string engine, string databaseName, string username)
     {
@@ -572,10 +684,14 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             {
                 return await GetMySqlCredentialsAsync(databaseName, username);
             }
-            else if (engineLower == "sqlserver")
+        else if (engineLower == "sqlserver")
             {
                 return await GetSqlServerCredentialsAsync(databaseName, username);
             }
+        else if (engineLower == "mongodb")
+        {
+            return await GetMongoCredentialsAsync(databaseName, username);
+        }
             else
             {
                 throw new NotImplementedException($"El motor de base de datos '{engine}' no es soportado.");
@@ -686,6 +802,37 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Username = username,
             Password = "******",
             Engine = "SQL Server"
+        };
+    }
+
+    private async Task<DatabaseConnectionDetails?> GetMongoCredentialsAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMongoConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return null;
+        }
+
+        var client = new MongoClient(adminConnectionString);
+
+        var databaseNames = await (await client.ListDatabaseNamesAsync()).ToListAsync();
+        if (!databaseNames.Contains(databaseName))
+        {
+            return null;
+        }
+
+        var mongoUrl = new MongoUrl(adminConnectionString);
+        var host = mongoUrl.Server.Host;
+        var port = mongoUrl.Server.Port;
+
+        return new DatabaseConnectionDetails
+        {
+            Host = host,
+            Port = port > 0 ? port : 27017,
+            DatabaseName = databaseName,
+            Username = username,
+            Password = "******",
+            Engine = "MongoDB"
         };
     }
 }

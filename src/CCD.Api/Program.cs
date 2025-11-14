@@ -23,6 +23,7 @@ var envVarMappings = new Dictionary<string, string>
     ["ADMIN_POSTGRES_CONNECTION"] = "ConnectionStrings__AdminPostgresConnection",
     ["ADMIN_MYSQL_CONNECTION"] = "ConnectionStrings__AdminMySqlConnection",
     ["ADMIN_SQLSERVER_CONNECTION"] = "ConnectionStrings__AdminSqlServerConnection",
+    ["ADMIN_MONGO_CONNECTION"] = "ConnectionStrings__AdminMongoConnection",
     ["SENDGRID_API_KEY"] = "SendGrid__ApiKey",
     ["SENDGRID_FROM_EMAIL"] = "SendGrid__FromEmail",
     ["SENDGRID_FROM_NAME"] = "SendGrid__FromName",
