@@ -13,10 +13,12 @@ public interface IDatabaseProvisioner
     Task<DatabaseConnectionDetails> CreatePostgreSqlDatabaseAsync(Guid userId);
     Task<DatabaseConnectionDetails> CreateMySqlDatabaseAsync(Guid userId);
     Task<DatabaseConnectionDetails> CreateSqlServerDatabaseAsync(Guid userId);
+    Task<DatabaseConnectionDetails> CreateMongoDatabaseAsync(Guid userId);
     
     Task<bool> DeletePostgreSqlDatabaseAsync(string databaseName, string username);
     Task<bool> DeleteMySqlDatabaseAsync(string databaseName, string username);
     Task<bool> DeleteSqlServerDatabaseAsync(string databaseName, string username);
+    Task<bool> DeleteMongoDatabaseAsync(string databaseName, string username);
     
     string GenerateSecurePassword();
 }
