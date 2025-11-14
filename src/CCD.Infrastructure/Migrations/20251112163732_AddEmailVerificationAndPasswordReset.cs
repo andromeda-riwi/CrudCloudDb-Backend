@@ -10,6 +10,7 @@ namespace CCD.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            /*
             migrationBuilder.AddColumn<bool>(
                 name: "EmailVerified",
                 table: "Users",
@@ -40,6 +41,7 @@ namespace CCD.Infrastructure.Migrations
                 table: "Users",
                 type: "timestamp with time zone",
                 nullable: true);
+            */
         }
 
         /// <inheritdoc />
@@ -67,4 +69,3 @@ namespace CCD.Infrastructure.Migrations
         }
     }
 }
-

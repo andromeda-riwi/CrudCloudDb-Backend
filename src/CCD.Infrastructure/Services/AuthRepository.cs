@@ -19,13 +19,15 @@ public class AuthRepository : IAuthRepository
     private readonly IConfiguration _config;
     private readonly IEmailService _emailService;
     private readonly ILogger<AuthRepository> _logger;
+    private readonly IWebhookService _webhookService;
 
-    public AuthRepository(ApplicationDbContext context, IConfiguration config, IEmailService emailService, ILogger<AuthRepository> logger)
+    public AuthRepository(ApplicationDbContext context, IConfiguration config, IEmailService emailService, ILogger<AuthRepository> logger, IWebhookService webhookService)
     {
         _context = context;
         _config = config;
         _emailService = emailService;
         _logger = logger;
+        _webhookService = webhookService;
     }
 
     // --- LÓGICA DE REGISTRO ---
@@ -66,6 +68,17 @@ public class AuthRepository : IAuthRepository
 
             Console.WriteLine($"[AuthRepo] Usuario guardado exitosamente: {user.Email}");
             
+            // Disparar webhook de creación de cuenta
+            try
+            {
+                await _webhookService.TriggerWebhooksAsync("user.created", new { UserId = user.Id, user.Email, user.UserName, user.CreatedAt });
+                _logger.LogInformation($"Webhook 'user.created' disparado para usuario {user.Id}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error al disparar webhook 'user.created' para usuario {user.Id}");
+            }
+
             // Generar token de verificación y enviar correo
             // NOTA: El correo de bienvenida se enviará DESPUÉS de verificar el email
             try
@@ -362,5 +375,40 @@ public class AuthRepository : IAuthRepository
     {
         return await _context.Users
             .FirstOrDefaultAsync(u => u.UserName.ToLower() == userName.ToLower());
+    }
+
+    /// <summary>
+    /// Cambiar contraseña del usuario (requiere contraseña actual)
+    /// </summary>
+    public async Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword)
+    {
+        if (string.IsNullOrEmpty(currentPassword) || string.IsNullOrEmpty(newPassword))
+        {
+            return false;
+        }
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+        {
+            _logger.LogWarning($"Intento de cambio de contraseña para usuario no encontrado: {userId}");
+            return false;
+        }
+
+        // Verificar que la contraseña actual sea correcta
+        if (!VerifyPasswordHash(currentPassword, user.PasswordHash, user.PasswordSalt))
+        {
+            _logger.LogWarning($"Intento de cambio de contraseña con contraseña incorrecta para usuario {userId}");
+            return false;
+        }
+
+        // Generar nuevo hash y salt
+        CreatePasswordHash(newPassword, out byte[] newPasswordHash, out byte[] newPasswordSalt);
+        user.PasswordHash = newPasswordHash;
+        user.PasswordSalt = newPasswordSalt;
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation($"Contraseña cambiada exitosamente para usuario {userId}");
+        return true;
     }
 }

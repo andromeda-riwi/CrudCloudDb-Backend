@@ -8,6 +8,7 @@ public interface IDatabaseProvisioner
     Task<DatabaseConnectionDetails?> CreateDatabaseAsync(string engine, Guid userId);
     Task<bool> DeleteDatabaseAsync(string engine, string databaseName, string username);
     Task<DatabaseConnectionDetails?> GetDatabaseCredentialsAsync(string engine, string databaseName, string username);
+    Task<DatabaseConnectionDetails?> RotateDatabaseCredentialsAsync(string engine, string databaseName, string username);
     
     // Métodos específicos para cada motor de base de datos
     Task<DatabaseConnectionDetails> CreatePostgreSqlDatabaseAsync(Guid userId);

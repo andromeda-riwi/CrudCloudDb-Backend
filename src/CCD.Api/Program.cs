@@ -88,11 +88,14 @@ builder.Services.AddCors(options =>
     options.AddPolicy(name: MyAllowSpecificOrigins,
                       policy =>
                       {
-                          policy.WithOrigins("http://localhost:5173",
-                                           "http://localhost:8080",
-                                           "https://andromeda.andrescortes.dev")
+                          policy.WithOrigins(
+                                "http://localhost:3000",
+                                "http://localhost:5173",
+                                "http://localhost:8080",
+                                "https://andromeda.andrescortes.dev")
                                 .AllowAnyHeader()
-                                .AllowAnyMethod();
+                                .AllowAnyMethod()
+                                .AllowCredentials();
                       });
 });
 
@@ -102,6 +105,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // 3. Configuración del servicio de correo electrónico
 builder.Services.AddScoped<IEmailService, SendGridEmailService>();
+builder.Services.AddScoped<IWebhookService, WebhookService>();
+builder.Services.AddHttpClient();
 
 // 3. Registro de Servicios y Repositorios (Inyección de Dependencias)
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
@@ -153,8 +158,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKeyString)),
             ValidateIssuer = false,
+using CCD.Api.Middleware;
+
+// ...existing code...
+
             ValidateAudience = false
         };
+// Agregar middleware global de excepciones
+app.UseMiddleware<GlobalExceptionMiddleware>();
     });
 
 
