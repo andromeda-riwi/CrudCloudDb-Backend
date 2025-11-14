@@ -6,6 +6,52 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using MercadoPago.Config;
+using DotNetEnv;
+
+// Cargar .env automáticamente (busca hacia arriba en el árbol de directorios)
+// Busca desde el directorio actual (src/CCD.Api) hasta la raíz del proyecto
+Env.TraversePath().Load();
+Console.WriteLine("Variables de entorno cargadas desde .env");
+
+// Convertir variables del formato .env al formato ASP.NET Core (con doble guion bajo)
+var envVarMappings = new Dictionary<string, string>
+{
+    ["MERCADOPAGO_ACCESS_TOKEN"] = "MercadoPago__AccessToken",
+    ["MERCADOPAGO_WEBHOOK_SECRET"] = "MercadoPago__WebhookSecret",
+    ["JWT_SECRET_TOKEN"] = "AppSettings__Token",
+    ["DEFAULT_CONNECTION"] = "ConnectionStrings__DefaultConnection",
+    ["ADMIN_POSTGRES_CONNECTION"] = "ConnectionStrings__AdminPostgresConnection",
+    ["ADMIN_MYSQL_CONNECTION"] = "ConnectionStrings__AdminMySqlConnection",
+    ["ADMIN_SQLSERVER_CONNECTION"] = "ConnectionStrings__AdminSqlServerConnection",
+    ["SENDGRID_API_KEY"] = "SendGrid__ApiKey",
+    ["SENDGRID_FROM_EMAIL"] = "SendGrid__FromEmail",
+    ["SENDGRID_FROM_NAME"] = "SendGrid__FromName",
+    ["APP_DASHBOARD_URL"] = "App__DashboardUrl",
+    // ASPNETCORE_* ya están en el formato correcto, solo asegurarse que existan
+    ["ASPNETCORE_ENVIRONMENT"] = "ASPNETCORE_ENVIRONMENT",
+    ["ASPNETCORE_URLS"] = "ASPNETCORE_URLS"
+};
+
+foreach (var (original, aspnetCore) in envVarMappings)
+{
+    var value = Environment.GetEnvironmentVariable(original);
+    if (!string.IsNullOrEmpty(value))
+    {
+        Environment.SetEnvironmentVariable(aspnetCore, value);
+        Console.WriteLine($"  ✓ {aspnetCore} configurado");
+    }
+}
+
+// Valores por defecto si no están definidos
+if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")))
+{
+    Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Development");
+}
+if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+{
+    // Usar localhost para acceso local, o + para todas las interfaces
+    Environment.SetEnvironmentVariable("ASPNETCORE_URLS", "http://localhost:5063");
+}
 
 // Cargar variables de entorno desde el archivo .env
 var envPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", ".env");
