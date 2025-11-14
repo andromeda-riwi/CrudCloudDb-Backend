@@ -1,8 +1,10 @@
 using System.Security.Claims;
+using CCD.Api.Dtos;
 using CCD.Core.Dtos;
 using CCD.Core.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CreatePreferenceRequestDto = CCD.Core.Dtos.CreatePreferenceRequestDto;
 
 namespace CCD.Api.Controllers;
 
@@ -46,6 +48,26 @@ public class PaymentsController : ControllerBase
         catch (Exception)
         {
             return StatusCode(500, new { message = "Ocurrió un error al comunicarse con el servicio de pagos." });
+        }
+    }
+
+    [HttpPost("confirm")]
+    public async Task<IActionResult> ConfirmPayment(ConfirmPaymentRequestDto request)
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out _))
+        {
+            return Unauthorized(new { message = "Token de usuario inválido." });
+        }
+
+        try
+        {
+            await _paymentService.ProcessPaymentNotificationAsync(request.PaymentId);
+            return Ok(new { message = "Pago confirmado. Tu plan se actualizará si el pago está aprobado." });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "No fue posible confirmar el pago. Intenta nuevamente o contacta a soporte." });
         }
     }
 }
