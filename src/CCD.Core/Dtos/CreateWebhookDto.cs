@@ -1,9 +1,17 @@
-﻿namespace CCD.Api.Dtos;
+﻿﻿using System.ComponentModel.DataAnnotations;
+
+namespace CCD.Api.Dtos;
 
 public class CreateWebhookDto
 {
-    public string Event { get; set; } = string.Empty;
+    [Required]
+    [Url]
     public string Url { get; set; } = string.Empty;
-    public string? Secret { get; set; }
+
+    [Required]
+    public string EventTypes { get; set; } = string.Empty;
+
+    public string? Description { get; set; }
+
     public bool IsActive { get; set; } = true;
 }

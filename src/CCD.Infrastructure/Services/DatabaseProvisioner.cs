@@ -6,7 +6,6 @@ using MySql.Data.MySqlClient;
 using Microsoft.Data.SqlClient;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using CCD.Core.Interfaces;
 
 namespace CCD.Infrastructure.Services;
 
@@ -899,9 +898,15 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         var newUsername = $"user_{Guid.NewGuid().ToString().Substring(0, 8)}";
         var newPassword = GenerateSecurePassword();
 
+        string host;
+        int port;
+        
         using (var connection = new NpgsqlConnection(adminConnectionString))
         {
             await connection.OpenAsync();
+            host = connection.Host;
+            port = connection.Port;
+            
             using (var cmd = new NpgsqlCommand($"DROP ROLE IF EXISTS {oldUsername};", connection))
             {
                 await cmd.ExecuteNonQueryAsync();
@@ -925,8 +930,8 @@ public class DatabaseProvisioner : IDatabaseProvisioner
 
         return new DatabaseConnectionDetails
         {
-            Host = connection.Host,
-            Port = connection.Port,
+            Host = host,
+            Port = port,
             DatabaseName = databaseName,
             Username = newUsername,
             Password = newPassword,
@@ -940,9 +945,16 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         var newUsername = $"user_{Guid.NewGuid().ToString().Substring(0, 8)}";
         var newPassword = GenerateSecurePassword();
 
+        string host;
+        int port;
+        
         using (var connection = new MySqlConnection(adminConnectionString))
         {
             await connection.OpenAsync();
+            
+            var builder = new MySqlConnectionStringBuilder(adminConnectionString);
+            host = builder.Server;
+            port = (int)builder.Port;
             
             using (var cmd = new MySqlCommand($"DROP USER IF EXISTS '{oldUsername}'@'%';", connection))
             {
@@ -967,8 +979,8 @@ public class DatabaseProvisioner : IDatabaseProvisioner
 
         return new DatabaseConnectionDetails
         {
-            Host = connection.Host,
-            Port = connection.Port,
+            Host = host,
+            Port = port,
             DatabaseName = databaseName,
             Username = newUsername,
             Password = newPassword,
@@ -982,9 +994,12 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         var newUsername = $"user_{Guid.NewGuid().ToString().Substring(0, 8)}";
         var newPassword = GenerateSecurePassword();
 
+        string dataSource;
+        
         using (var connection = new SqlConnection(adminConnectionString))
         {
             await connection.OpenAsync();
+            dataSource = connection.DataSource;
 
             using (var cmd = new SqlCommand($"DROP LOGIN [{oldUsername}];", connection))
             {
@@ -1009,7 +1024,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
 
         return new DatabaseConnectionDetails
         {
-            Host = connection.DataSource,
+            Host = dataSource,
             Port = 1433,
             DatabaseName = databaseName,
             Username = newUsername,
@@ -1026,24 +1041,26 @@ public class DatabaseProvisioner : IDatabaseProvisioner
 
         var client = new MongoClient(adminConnectionString);
         var db = client.GetDatabase("admin");
-        var usersCollection = db.GetCollection("system.users");
+        var usersCollection = db.GetCollection<BsonDocument>("system.users");
 
         try
         {
-            await db.RunCommandAsync(new BsonDocument("dropUser", oldUsername));
+            await db.RunCommandAsync<BsonDocument>(new BsonDocument("dropUser", oldUsername));
         }
         catch { }
 
-        await db.RunCommandAsync(new BsonDocument
+        await db.RunCommandAsync<BsonDocument>(new BsonDocument
         {
             { "createUser", newUsername },
             { "pwd", newPassword },
             { "roles", new BsonArray { new BsonDocument { { "role", "readWrite" }, { "db", databaseName } } } }
         });
 
+        var hostAndPort = adminConnectionString?.Split("@")[1].Split(":") ?? new[] { "localhost", "27017" };
+        
         return new DatabaseConnectionDetails
         {
-            Host = adminConnectionString.Split("@")[1].Split(":")[0],
+            Host = hostAndPort[0],
             Port = 27017,
             DatabaseName = databaseName,
             Username = newUsername,
@@ -1052,7 +1069,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         };
     }
 
-    private string GenerateSecurePassword()
+    public string GenerateSecurePassword()
     {
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%";
         var random = new Random();

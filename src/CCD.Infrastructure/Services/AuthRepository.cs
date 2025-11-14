@@ -71,7 +71,7 @@ public class AuthRepository : IAuthRepository
             // Disparar webhook de creación de cuenta
             try
             {
-                await _webhookService.TriggerWebhooksAsync("user.created", new { UserId = user.Id, user.Email, user.UserName, user.CreatedAt });
+                await _webhookService.TriggerWebhooksAsync("user.created", new { UserId = user.Id, user.Email, user.UserName });
                 _logger.LogInformation($"Webhook 'user.created' disparado para usuario {user.Id}");
             }
             catch (Exception ex)

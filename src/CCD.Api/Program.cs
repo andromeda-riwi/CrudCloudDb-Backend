@@ -1,4 +1,5 @@
 using System.Text;
+using CCD.Api.Middleware;
 using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
 using CCD.Infrastructure.Services;
@@ -158,14 +159,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKeyString)),
             ValidateIssuer = false,
-using CCD.Api.Middleware;
-
-// ...existing code...
-
             ValidateAudience = false
         };
-// Agregar middleware global de excepciones
-app.UseMiddleware<GlobalExceptionMiddleware>();
     });
 
 
@@ -180,6 +175,8 @@ app.UseSwaggerUI(c =>
 });
 
 app.UseHttpsRedirection();
+
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseCors(MyAllowSpecificOrigins);
 

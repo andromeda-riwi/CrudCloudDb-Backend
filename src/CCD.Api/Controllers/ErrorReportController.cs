@@ -1,6 +1,7 @@
 ﻿using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core;
+using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -80,7 +81,7 @@ public class ErrorReportController : ControllerBase
     /// </summary>
     [HttpGet("history")]
     [Authorize]
-    public async Task<IActionResult> GetErrorHistory()
+    public IActionResult GetErrorHistory()
     {
         // Nota: Este endpoint devuelve un mensaje indicando que el historial
         // se mantiene en logs del sistema. En una implementación futura,

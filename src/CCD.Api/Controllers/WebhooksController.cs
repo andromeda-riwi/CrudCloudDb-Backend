@@ -1,11 +1,4 @@
-﻿Tiene razón. Ya existe un `WebhookController` en `src/CCD.Api/Controllers/WebhookController.cs`.
-
-Sin embargo, el controlador existente es una versión básica y necesita ser actualizado para implementar todos los métodos definidos en `IWebhookService` y para utilizar los DTOs que hemos creado. La versión actual no incluye la funcionalidad para obtener un webhook por ID, actualizarlo o eliminarlo.
-
-A continuación, se presenta la versión actualizada y completa del `WebhookController` que se alinea con la interfaz `IWebhookService` y los DTOs definidos.
-
-```csharp
-using CCD.Api.Dtos;
+﻿using CCD.Api.Dtos;
 using CCD.Core.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,12 +10,12 @@ namespace CCD.Api.Controllers
 {
     [Authorize]
     [ApiController]
-    [Route("api/webhooks")] // Se ajusta la ruta para seguir la convención RESTful
-    public class WebhookController : ControllerBase
+    [Route("api/webhooks")]
+    public class WebhooksController : ControllerBase
     {
         private readonly IWebhookService _webhookService;
 
-        public WebhookController(IWebhookService webhookService)
+        public WebhooksController(IWebhookService webhookService)
         {
             _webhookService = webhookService;
         }
@@ -30,15 +23,15 @@ namespace CCD.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateWebhook([FromBody] CreateWebhookDto createDto)
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-            var webhook = await _webhookService.CreateWebhookAsync(userId, createDto.Url, createDto.Event, createDto.Secret, createDto.IsActive);
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var webhook = await _webhookService.CreateWebhookAsync(userId, createDto.Url, createDto.EventTypes, createDto.Description, createDto.IsActive);
             return CreatedAtAction(nameof(GetWebhookById), new { id = webhook.Id }, webhook);
         }
 
         [HttpGet]
         public async Task<IActionResult> GetUserWebhooks()
         {
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             var webhooks = await _webhookService.GetUserWebhooksAsync(userId);
             return Ok(webhooks);
         }
@@ -52,7 +45,7 @@ namespace CCD.Api.Controllers
                 return NotFound();
             }
 
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             if (webhook.UserId != userId)
             {
                 return Forbid();
@@ -62,7 +55,7 @@ namespace CCD.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateWebhook(Guid id, [FromBody] UpdateWebhookDto updateDto)
+        public async Task<IActionResult> UpdateWebhook(Guid id, [FromBody] CreateWebhookDto updateDto)
         {
             var webhook = await _webhookService.GetWebhookByIdAsync(id);
             if (webhook == null)
@@ -70,13 +63,13 @@ namespace CCD.Api.Controllers
                 return NotFound();
             }
 
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             if (webhook.UserId != userId)
             {
                 return Forbid();
             }
 
-            await _webhookService.UpdateWebhookAsync(id, updateDto.Url, updateDto.Event, updateDto.Secret, updateDto.IsActive);
+            await _webhookService.UpdateWebhookAsync(id, updateDto.Url, updateDto.EventTypes, updateDto.Description, updateDto.IsActive);
             return NoContent();
         }
 
@@ -89,7 +82,7 @@ namespace CCD.Api.Controllers
                 return NotFound();
             }
 
-            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             if (webhook.UserId != userId)
             {
                 return Forbid();

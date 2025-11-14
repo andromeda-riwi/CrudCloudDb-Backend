@@ -444,7 +444,7 @@ public class DatabasesController : ControllerBase
 
             try
             {
-                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value!;
                 if (!string.IsNullOrEmpty(userEmail))
                 {
                     await _emailService.SendDatabaseCredentialsAsync(

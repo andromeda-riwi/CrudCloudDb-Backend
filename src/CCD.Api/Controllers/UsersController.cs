@@ -98,7 +98,6 @@ public class UsersController : ControllerBase
             MonthlyPrice = user.Plan?.Price ?? 0,
             DatabaseCountByEngine = databases,
             TotalDatabases = totalDatabases,
-            NextBillingDate = user.PlanRenewalDate,
             CanUpgrade = (user.Plan?.Id ?? 1) < 3 // Puedes upgradear si no estás en el plan más alto
         };
 

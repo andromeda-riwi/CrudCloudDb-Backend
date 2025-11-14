@@ -117,14 +117,12 @@ public class PaymentsController : ControllerBase
         try
         {
             var plans = await _context.Plans
-                .Where(p => p.IsActive)
                 .Select(p => new
                 {
                     p.Id,
                     p.Name,
                     p.Price,
-                    p.DatabaseLimitPerEngine,
-                    p.Description
+                    p.DatabaseLimitPerEngine
                 })
                 .ToListAsync();
 

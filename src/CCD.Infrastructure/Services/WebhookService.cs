@@ -1,13 +1,15 @@
-﻿using CCD.Core.Entities;
+﻿using CCD.Core;
 using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Http;
 using System.Text.Json;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace CCD.Infrastructure.Services
 {
@@ -24,13 +26,14 @@ namespace CCD.Infrastructure.Services
             _httpClientFactory = httpClientFactory;
         }
 
-        public async Task<Webhook> CreateWebhookAsync(Guid userId, string url, string secret, bool isActive)
+        public async Task<Webhook> CreateWebhookAsync(Guid userId, string url, string eventTypes, string? description, bool isActive)
         {
             var webhook = new Webhook
             {
                 UserId = userId,
                 Url = url,
-                Secret = secret,
+                Event = eventTypes, // Mapear a la propiedad Event
+                Secret = Guid.NewGuid().ToString("N"), // Generar un secret automáticamente
                 IsActive = isActive
             };
 
@@ -46,12 +49,12 @@ namespace CCD.Infrastructure.Services
                 .ToListAsync();
         }
 
-        public async Task<Webhook> GetWebhookByIdAsync(Guid webhookId)
+        public async Task<Webhook?> GetWebhookByIdAsync(Guid webhookId)
         {
             return await _context.Webhooks.FindAsync(webhookId);
         }
 
-        public async Task UpdateWebhookAsync(Guid webhookId, string url, string secret, bool isActive)
+        public async Task UpdateWebhookAsync(Guid webhookId, string url, string eventTypes, string? description, bool isActive)
         {
             var webhook = await _context.Webhooks.FindAsync(webhookId);
             if (webhook == null)
@@ -60,8 +63,9 @@ namespace CCD.Infrastructure.Services
             }
 
             webhook.Url = url;
-            webhook.Secret = secret;
+            webhook.Event = eventTypes; // Mapear a la propiedad Event
             webhook.IsActive = isActive;
+            webhook.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
         }
