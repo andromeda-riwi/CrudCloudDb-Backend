@@ -60,34 +60,55 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Debes proporcionar un email o nombre de usuario." });
         }
         
-        // Llama al método Login del repositorio
+        // Intentar login primero (verifica contraseña y estado de verificación)
+        // El método Login verifica:
+        // 1. Si el usuario existe
+        // 2. Si la contraseña es correcta
+        // 3. Si el email está verificado (OBLIGATORIO)
         var token = await _authRepo.Login(identifier, request.Password, loginType == "email");
 
-        // Si el repositorio devuelve null, significa que las credenciales son inválidas.
+        // Si el repositorio devuelve null, puede ser por:
+        // 1. Usuario no encontrado
+        // 2. Contraseña incorrecta  
+        // 3. Email no verificado (contraseña correcta pero email sin verificar)
         if (token == null)
         {
             Console.WriteLine($"[LOGIN] Login fallido para: {identifier}");
+            
+            // Verificar si el usuario existe y su estado de verificación
+            // Esto nos permite dar un mensaje más claro cuando el email no está verificado
+            User? user = null;
+            if (loginType == "email")
+            {
+                user = await _authRepo.GetUserByEmailAsync(identifier);
+            }
+            else
+            {
+                user = await _authRepo.GetUserByUserNameAsync(identifier);
+            }
+            
+            // Si el usuario existe pero no está verificado, dar mensaje específico
+            // NOTA: Login verifica la contraseña ANTES de verificar el estado, entonces
+            // si llegamos aquí y el usuario existe y no está verificado, la contraseña
+            // probablemente es correcta (aunque no podemos estar 100% seguros por seguridad)
+            if (user != null && !user.EmailVerified)
+            {
+                return Unauthorized(new { 
+                    message = "Debes verificar tu email antes de iniciar sesión. Revisa tu correo electrónico.",
+                    requiresEmailVerification = true
+                });
+            }
+            
+            // Si llegamos aquí, las credenciales son inválidas
+            // (usuario no existe o contraseña incorrecta)
             return Unauthorized(new { message = "Credenciales inválidas." });
         }
 
-        // Verificar si el email está verificado
-        // Obtener el usuario para verificar el estado del email
-        User? user = null;
-        if (loginType == "email")
-        {
-            user = await _authRepo.GetUserByEmailAsync(identifier);
-        }
-        else
-        {
-            user = await _authRepo.GetUserByUserNameAsync(identifier);
-        }
-
-        var emailVerified = user != null ? await _authRepo.IsEmailVerifiedAsync(user.Id) : false;
-
         Console.WriteLine($"[LOGIN] Login exitoso para: {identifier}");
+        // El email está verificado (si no, no llegamos aquí porque Login bloquea el acceso)
         return Ok(new { 
             token,
-            emailVerified = emailVerified
+            emailVerified = true
         });
     }
     
