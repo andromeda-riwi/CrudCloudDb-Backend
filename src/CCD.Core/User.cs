@@ -1,4 +1,6 @@
-﻿﻿namespace CCD.Core;
+﻿using System.Collections.Generic;
+
+namespace CCD.Core;
 
 public class User
 {
@@ -25,4 +27,5 @@ public class User
 
     // Propiedad de navegación: Un usuario puede tener muchas instancias de BD
     public ICollection<DatabaseInstance> DatabaseInstances { get; set; } = new List<DatabaseInstance>();
+    public ICollection<Webhook> Webhooks { get; set; } = new List<Webhook>();
 }

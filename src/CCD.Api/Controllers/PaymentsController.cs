@@ -2,9 +2,11 @@ using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core.Dtos;
 using CCD.Core.Interfaces;
+using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CreatePreferenceRequestDto = CCD.Core.Dtos.CreatePreferenceRequestDto;
+using Microsoft.EntityFrameworkCore;
 
 namespace CCD.Api.Controllers;
 
@@ -14,12 +16,23 @@ namespace CCD.Api.Controllers;
 public class PaymentsController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
+    private readonly ApplicationDbContext _context;
+    private readonly ILogger<PaymentsController> _logger;
 
-    public PaymentsController(IPaymentService paymentService)
+    public PaymentsController(
+        IPaymentService paymentService,
+        ApplicationDbContext context,
+        ILogger<PaymentsController> logger)
     {
         _paymentService = paymentService;
+        _context = context;
+        _logger = logger;
     }
 
+    /// <summary>
+    /// Crear preferencia de pago en Mercado Pago
+    /// POST /api/payments/preference
+    /// </summary>
     [HttpPost("preference")]
     public async Task<IActionResult> CreatePreference(CreatePreferenceRequestDto requestDto)
     {
@@ -45,8 +58,9 @@ public class PaymentsController : ControllerBase
 
             return Ok(response);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Error al crear preferencia de pago");
             return StatusCode(500, new { message = "Ocurrió un error al comunicarse con el servicio de pagos." });
         }
     }

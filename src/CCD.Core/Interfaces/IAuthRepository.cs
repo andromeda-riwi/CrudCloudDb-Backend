@@ -1,4 +1,4 @@
-﻿﻿using CCD.Core;
+﻿﻿﻿using CCD.Core;
 
 namespace CCD.Core.Interfaces;
 
@@ -26,4 +26,7 @@ public interface IAuthRepository
     Task<bool> ResetPasswordAsync(string token, string newPassword);
     Task<User?> GetUserByEmailAsync(string email);
     Task<User?> GetUserByUserNameAsync(string userName);
+    
+    // Cambiar contraseña (requiere contraseña actual)
+    Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword);
 }

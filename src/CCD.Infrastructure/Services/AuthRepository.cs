@@ -19,13 +19,15 @@ public class AuthRepository : IAuthRepository
     private readonly IConfiguration _config;
     private readonly IEmailService _emailService;
     private readonly ILogger<AuthRepository> _logger;
+    private readonly IWebhookService _webhookService;
 
-    public AuthRepository(ApplicationDbContext context, IConfiguration config, IEmailService emailService, ILogger<AuthRepository> logger)
+    public AuthRepository(ApplicationDbContext context, IConfiguration config, IEmailService emailService, ILogger<AuthRepository> logger, IWebhookService webhookService)
     {
         _context = context;
         _config = config;
         _emailService = emailService;
         _logger = logger;
+        _webhookService = webhookService;
     }
 
     // --- LÓGICA DE REGISTRO ---
@@ -66,7 +68,19 @@ public class AuthRepository : IAuthRepository
 
             Console.WriteLine($"[AuthRepo] Usuario guardado exitosamente: {user.Email}");
             
+            // Disparar webhook de creación de cuenta
+            try
+            {
+                await _webhookService.TriggerWebhooksAsync("user.created", new { UserId = user.Id, user.Email, user.UserName });
+                _logger.LogInformation($"Webhook 'user.created' disparado para usuario {user.Id}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error al disparar webhook 'user.created' para usuario {user.Id}");
+            }
+
             // Generar token de verificación y enviar correo
+            // NOTA: El correo de bienvenida se enviará DESPUÉS de verificar el email
             try
             {
                 var verificationToken = await GenerateEmailVerificationTokenAsync(user.Id);
@@ -77,18 +91,6 @@ public class AuthRepository : IAuthRepository
             {
                 // No fallar el registro si el correo no se puede enviar
                 _logger.LogError(ex, $"Error al enviar correo de verificación a {user.Email}");
-            }
-            
-            // Enviar correo de bienvenida
-            try
-            {
-                await _emailService.SendWelcomeEmailAsync(user.Email, user.UserName);
-                _logger.LogInformation($"Correo de bienvenida enviado a {user.Email}");
-            }
-            catch (Exception ex)
-            {
-                // No fallar el registro si el correo no se puede enviar
-                _logger.LogError(ex, $"Error al enviar correo de bienvenida a {user.Email}");
             }
             
             return user;
@@ -142,15 +144,18 @@ public class AuthRepository : IAuthRepository
             return null; // Contraseña incorrecta
         }
 
-        Console.WriteLine($"[AuthRepo] Password correcto. Generando token para: {identifier}");
+        Console.WriteLine($"[AuthRepo] Password correcto. Verificando estado de email para: {identifier}");
         
-        // Verificar si el email está verificado (opcional, no bloquea el login)
+        // VERIFICACIÓN OBLIGATORIA: Bloquear login si el email no está verificado
         if (!user.EmailVerified)
         {
-            _logger.LogWarning($"Usuario {user.Id} intentó iniciar sesión sin verificar email");
-            // Continuamos con el login, pero el frontend puede mostrar un aviso
+            _logger.LogWarning($"Usuario {user.Id} intentó iniciar sesión sin verificar email - BLOQUEADO");
+            // Retornar null para indicar que el login está bloqueado
+            // El controlador manejará este caso y retornará un mensaje apropiado
+            return null;
         }
         
+        Console.WriteLine($"[AuthRepo] Email verificado. Generando token para: {identifier}");
         string token = CreateToken(user);
         return token;
     }
@@ -270,6 +275,20 @@ public class AuthRepository : IAuthRepository
         await _context.SaveChangesAsync();
 
         _logger.LogInformation($"Email verificado exitosamente para usuario {user.Id}");
+        
+        // Enviar correo de bienvenida DESPUÉS de verificar el email
+        // Esto asegura que el usuario pueda usar el sistema cuando reciba la bienvenida
+        try
+        {
+            await _emailService.SendWelcomeEmailAsync(user.Email, user.UserName ?? user.Name);
+            _logger.LogInformation($"Correo de bienvenida enviado a {user.Email} después de verificación");
+        }
+        catch (Exception ex)
+        {
+            // No fallar la verificación si el correo no se puede enviar
+            _logger.LogError(ex, $"Error al enviar correo de bienvenida a {user.Email} después de verificación");
+        }
+        
         return true;
     }
 
@@ -356,5 +375,40 @@ public class AuthRepository : IAuthRepository
     {
         return await _context.Users
             .FirstOrDefaultAsync(u => u.UserName.ToLower() == userName.ToLower());
+    }
+
+    /// <summary>
+    /// Cambiar contraseña del usuario (requiere contraseña actual)
+    /// </summary>
+    public async Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword)
+    {
+        if (string.IsNullOrEmpty(currentPassword) || string.IsNullOrEmpty(newPassword))
+        {
+            return false;
+        }
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+        {
+            _logger.LogWarning($"Intento de cambio de contraseña para usuario no encontrado: {userId}");
+            return false;
+        }
+
+        // Verificar que la contraseña actual sea correcta
+        if (!VerifyPasswordHash(currentPassword, user.PasswordHash, user.PasswordSalt))
+        {
+            _logger.LogWarning($"Intento de cambio de contraseña con contraseña incorrecta para usuario {userId}");
+            return false;
+        }
+
+        // Generar nuevo hash y salt
+        CreatePasswordHash(newPassword, out byte[] newPasswordHash, out byte[] newPasswordSalt);
+        user.PasswordHash = newPasswordHash;
+        user.PasswordSalt = newPasswordSalt;
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation($"Contraseña cambiada exitosamente para usuario {userId}");
+        return true;
     }
 }

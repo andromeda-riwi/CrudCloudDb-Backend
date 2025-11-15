@@ -4,15 +4,20 @@ using Microsoft.Extensions.Configuration;
 using Npgsql;
 using MySql.Data.MySqlClient;
 using Microsoft.Data.SqlClient;
+using MongoDB.Bson;
+using MongoDB.Driver;
 
 namespace CCD.Infrastructure.Services;
 
 public class DatabaseProvisioner : IDatabaseProvisioner
 {
     private readonly IConfiguration _config;
-    public DatabaseProvisioner(IConfiguration config)
+    private readonly IWebhookService _webhookService;
+
+    public DatabaseProvisioner(IConfiguration config, IWebhookService webhookService)
     {
         _config = config;
+        _webhookService = webhookService;
     }
 
     public async Task<DatabaseConnectionDetails?> CreateDatabaseAsync(string engine, Guid userId)
@@ -30,6 +35,10 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         else if (engineLower == "sqlserver")
         {
             return await CreateSqlServerDatabaseAsync(userId);
+        }
+        else if (engineLower == "mongodb")
+        {
+            return await CreateMongoDatabaseAsync(userId);
         }
         else
         {
@@ -108,7 +117,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         }
 
         // 5. Devolver los detalles de la conexión
-        return new DatabaseConnectionDetails
+        var connectionDetails = new DatabaseConnectionDetails
         {
             Host = connection.Host,
             Port = connection.Port,
@@ -117,6 +126,19 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Password = dbPassword,
             Engine = "PostgreSQL"
         };
+
+        // Disparar webhook de creación de base de datos
+        try
+        {
+            await _webhookService.TriggerWebhooksAsync("database.created", new { UserId = userId, connectionDetails.Engine, connectionDetails.DatabaseName, connectionDetails.Username, connectionDetails.Host, connectionDetails.Port });
+        }
+        catch (Exception ex)
+        {
+            // No fallar la operación si el webhook no se puede enviar
+            Console.WriteLine($"Error al disparar webhook 'database.created': {ex.Message}");
+        }
+
+        return connectionDetails;
     }
 
     public async Task<DatabaseConnectionDetails> CreateMySqlDatabaseAsync(Guid userId)
@@ -172,7 +194,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         }
 
         // 5. Devolver los detalles de la conexión
-        return new DatabaseConnectionDetails
+        var connectionDetails = new DatabaseConnectionDetails
         {
             Host = connection.DataSource.Split(':')[0], // Extraer host sin puerto
             Port = connection.ServerVersion != null ? 3306 : 3306, // Puerto por defecto MySQL
@@ -181,37 +203,18 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Password = dbPassword,
             Engine = "MySQL"
         };
-    }
 
-    public string GenerateSecurePassword()
-    {
-        // Implementación mejorada para generar contraseñas seguras
-        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
-        var random = new Random();
-        var password = new char[16];
-
-        // Asegurar al menos un carácter de cada tipo
-        password[0] = chars[random.Next(0, 26)]; // Mayúscula
-        password[1] = chars[random.Next(26, 52)]; // Minúscula
-        password[2] = chars[random.Next(52, 62)]; // Número
-        password[3] = chars[random.Next(62, chars.Length)]; // Símbolo
-
-        // Llenar el resto con caracteres aleatorios
-        for (int i = 4; i < password.Length; i++)
+        // Disparar webhook de creación de base de datos
+        try
         {
-            password[i] = chars[random.Next(chars.Length)];
+            await _webhookService.TriggerWebhooksAsync("database.created", new { UserId = userId, connectionDetails.Engine, connectionDetails.DatabaseName, connectionDetails.Username, connectionDetails.Host, connectionDetails.Port });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al disparar webhook 'database.created': {ex.Message}");
         }
 
-        // Mezclar la contraseña
-        for (int i = password.Length - 1; i > 0; i--)
-        {
-            int j = random.Next(i + 1);
-            var temp = password[i];
-            password[i] = password[j];
-            password[j] = temp;
-        }
-
-        return new string(password);
+        return connectionDetails;
     }
 
     public async Task<DatabaseConnectionDetails> CreateSqlServerDatabaseAsync(Guid userId)
@@ -289,7 +292,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         }
 
         // 5. Devolver los detalles de la conexión
-        return new DatabaseConnectionDetails
+        var connectionDetails = new DatabaseConnectionDetails
         {
             Host = connection.DataSource.Split(',')[0], // Extraer host sin puerto
             Port = 1433, // Puerto por defecto SQL Server
@@ -297,6 +300,88 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Username = dbUser,
             Password = dbPassword,
             Engine = "SQL Server"
+        };
+
+        // Disparar webhook de creación de base de datos
+        try
+        {
+            await _webhookService.TriggerWebhooksAsync("database.created", new { UserId = userId, connectionDetails.Engine, connectionDetails.DatabaseName, connectionDetails.Username, connectionDetails.Host, connectionDetails.Port });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al disparar webhook 'database.created': {ex.Message}");
+        }
+
+        return connectionDetails;
+    }
+
+    public async Task<DatabaseConnectionDetails> CreateMongoDatabaseAsync(Guid userId)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMongoConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            throw new InvalidOperationException(
+                "La cadena de conexión 'AdminMongoConnection' no está configurada. " +
+                "Esta conexión debe apuntar a un usuario administrador con permisos para crear bases de datos y usuarios."
+            );
+        }
+
+        var dbName = $"user_{userId.ToString().Substring(0, 8)}_{Guid.NewGuid().ToString().Substring(0, 4)}";
+        var dbUser = $"user_{Guid.NewGuid().ToString("N").Substring(0, 12)}";
+        var dbPassword = GenerateSecurePassword();
+
+        var client = new MongoClient(adminConnectionString);
+        var mongoUrl = new MongoUrl(adminConnectionString);
+        var targetDb = client.GetDatabase(dbName);
+
+        var tempCollection = targetDb.GetCollection<BsonDocument>("_temp_init");
+        await tempCollection.InsertOneAsync(new BsonDocument
+        {
+            { "_id", ObjectId.GenerateNewId() },
+            { "temp", true }
+        });
+
+        var createUserCommand = new BsonDocument
+        {
+            { "createUser", dbUser },
+            { "pwd", dbPassword },
+            {
+                "roles",
+                new BsonArray
+                {
+                    new BsonDocument { { "role", "readWrite" }, { "db", dbName } },
+                    new BsonDocument { { "role", "dbAdmin" }, { "db", dbName } }
+                }
+            }
+        };
+
+        await targetDb.RunCommandAsync<BsonDocument>(new BsonDocumentCommand<BsonDocument>(createUserCommand));
+        await targetDb.DropCollectionAsync("_temp_init");
+
+        var metadataCollection = targetDb.GetCollection<BsonDocument>("_metadata");
+        await metadataCollection.InsertOneAsync(new BsonDocument
+        {
+            { "_id", ObjectId.GenerateNewId() },
+            { "createdAt", DateTime.UtcNow },
+            { "createdBy", "CrudCloudDb" },
+            { "userId", userId.ToString() },
+            { "databaseName", dbName },
+            { "username", dbUser },
+            { "status", "Active" },
+            { "description", "Base de datos creada por CrudCloudDb" }
+        });
+
+        var host = mongoUrl.Server.Host;
+        var port = mongoUrl.Server.Port;
+
+        return new DatabaseConnectionDetails
+        {
+            Host = host,
+            Port = port > 0 ? port : 27017,
+            DatabaseName = dbName,
+            Username = dbUser,
+            Password = dbPassword,
+            Engine = "MongoDB"
         };
     }
 
@@ -314,10 +399,24 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             {
                 return await DeleteMySqlDatabaseAsync(databaseName, username);
             }
-            else if (engineLower == "sqlserver")
+        else if (engineLower == "sqlserver")
             {
                 return await DeleteSqlServerDatabaseAsync(databaseName, username);
             }
+        else if (engineLower == "mongodb")
+        {
+            var result = await DeleteMongoDatabaseAsync(databaseName, username);
+            // Disparar webhook de eliminación de base de datos
+            try
+            {
+                await _webhookService.TriggerWebhooksAsync("database.deleted", new { Engine = engine, DatabaseName = databaseName, Username = username, IsSuccess = result });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al disparar webhook 'database.deleted': {ex.Message}");
+            }
+            return result;
+        }
             else
             {
                 throw new NotImplementedException($"El motor de base de datos '{engine}' no es soportado.");
@@ -557,6 +656,38 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             return false;
         }
     }
+
+    public async Task<bool> DeleteMongoDatabaseAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMongoConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return false;
+        }
+
+        try
+        {
+            var client = new MongoClient(adminConnectionString);
+            var targetDb = client.GetDatabase(databaseName);
+
+            try
+            {
+                var dropUserCommand = new BsonDocument { { "dropUser", username } };
+                await targetDb.RunCommandAsync<BsonDocument>(new BsonDocumentCommand<BsonDocument>(dropUserCommand));
+            }
+            catch
+            {
+                // Si el usuario no existe continuamos con la eliminación de la base de datos
+            }
+
+            await client.DropDatabaseAsync(databaseName);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
     
     public async Task<DatabaseConnectionDetails?> GetDatabaseCredentialsAsync(string engine, string databaseName, string username)
     {
@@ -572,10 +703,14 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             {
                 return await GetMySqlCredentialsAsync(databaseName, username);
             }
-            else if (engineLower == "sqlserver")
+        else if (engineLower == "sqlserver")
             {
                 return await GetSqlServerCredentialsAsync(databaseName, username);
             }
+        else if (engineLower == "mongodb")
+        {
+            return await GetMongoCredentialsAsync(databaseName, username);
+        }
             else
             {
                 throw new NotImplementedException($"El motor de base de datos '{engine}' no es soportado.");
@@ -687,5 +822,257 @@ public class DatabaseProvisioner : IDatabaseProvisioner
             Password = "******",
             Engine = "SQL Server"
         };
+    }
+
+    private async Task<DatabaseConnectionDetails?> GetMongoCredentialsAsync(string databaseName, string username)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMongoConnection");
+        if (string.IsNullOrEmpty(adminConnectionString))
+        {
+            return null;
+        }
+
+        var client = new MongoClient(adminConnectionString);
+
+        var databaseNames = await (await client.ListDatabaseNamesAsync()).ToListAsync();
+        if (!databaseNames.Contains(databaseName))
+        {
+            return null;
+        }
+
+        var mongoUrl = new MongoUrl(adminConnectionString);
+        var host = mongoUrl.Server.Host;
+        var port = mongoUrl.Server.Port;
+
+        return new DatabaseConnectionDetails
+        {
+            Host = host,
+            Port = port > 0 ? port : 27017,
+            DatabaseName = databaseName,
+            Username = username,
+            Password = "******",
+            Engine = "MongoDB"
+        };
+    }
+
+    /// <summary>
+    /// Rotar credenciales de una base de datos
+    /// Genera nuevas credenciales para el usuario existente
+    /// </summary>
+    public async Task<DatabaseConnectionDetails?> RotateDatabaseCredentialsAsync(string engine, string databaseName, string oldUsername)
+    {
+        var engineLower = engine.ToLower();
+
+        try
+        {
+            if (engineLower == "postgresql")
+            {
+                return await RotatePostgreSqlCredentialsAsync(databaseName, oldUsername);
+            }
+            else if (engineLower == "mysql")
+            {
+                return await RotateMySqlCredentialsAsync(databaseName, oldUsername);
+            }
+            else if (engineLower == "sqlserver")
+            {
+                return await RotateSqlServerCredentialsAsync(databaseName, oldUsername);
+            }
+            else if (engineLower == "mongodb")
+            {
+                return await RotateMongoCredentialsAsync(databaseName, oldUsername);
+            }
+            else
+            {
+                throw new NotImplementedException($"Rotación no soportada para '{engine}'");
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error al rotar credenciales: {ex.Message}", ex);
+        }
+    }
+
+    private async Task<DatabaseConnectionDetails?> RotatePostgreSqlCredentialsAsync(string databaseName, string oldUsername)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminPostgresConnection");
+        var newUsername = $"user_{Guid.NewGuid().ToString().Substring(0, 8)}";
+        var newPassword = GenerateSecurePassword();
+
+        string host;
+        int port;
+        
+        using (var connection = new NpgsqlConnection(adminConnectionString))
+        {
+            await connection.OpenAsync();
+            host = connection.Host;
+            port = connection.Port;
+            
+            using (var cmd = new NpgsqlCommand($"DROP ROLE IF EXISTS {oldUsername};", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            using (var cmd = new NpgsqlCommand($"CREATE ROLE {newUsername} WITH LOGIN PASSWORD '{newPassword}';", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            using (var cmd = new NpgsqlCommand($"GRANT CONNECT ON DATABASE {databaseName} TO {newUsername};", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            using (var cmd = new NpgsqlCommand($"GRANT USAGE ON SCHEMA public TO {newUsername}; GRANT CREATE ON SCHEMA public TO {newUsername};", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        return new DatabaseConnectionDetails
+        {
+            Host = host,
+            Port = port,
+            DatabaseName = databaseName,
+            Username = newUsername,
+            Password = newPassword,
+            Engine = "PostgreSQL"
+        };
+    }
+
+    private async Task<DatabaseConnectionDetails?> RotateMySqlCredentialsAsync(string databaseName, string oldUsername)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMySqlConnection");
+        var newUsername = $"user_{Guid.NewGuid().ToString().Substring(0, 8)}";
+        var newPassword = GenerateSecurePassword();
+
+        string host;
+        int port;
+        
+        using (var connection = new MySqlConnection(adminConnectionString))
+        {
+            await connection.OpenAsync();
+            
+            var builder = new MySqlConnectionStringBuilder(adminConnectionString);
+            host = builder.Server;
+            port = (int)builder.Port;
+            
+            using (var cmd = new MySqlCommand($"DROP USER IF EXISTS '{oldUsername}'@'%';", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            using (var cmd = new MySqlCommand($"CREATE USER '{newUsername}'@'%' IDENTIFIED BY '{newPassword}';", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            using (var cmd = new MySqlCommand($"GRANT ALL PRIVILEGES ON {databaseName}.* TO '{newUsername}'@'%';", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            using (var cmd = new MySqlCommand("FLUSH PRIVILEGES;", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        return new DatabaseConnectionDetails
+        {
+            Host = host,
+            Port = port,
+            DatabaseName = databaseName,
+            Username = newUsername,
+            Password = newPassword,
+            Engine = "MySQL"
+        };
+    }
+
+    private async Task<DatabaseConnectionDetails?> RotateSqlServerCredentialsAsync(string databaseName, string oldUsername)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminSqlServerConnection");
+        var newUsername = $"user_{Guid.NewGuid().ToString().Substring(0, 8)}";
+        var newPassword = GenerateSecurePassword();
+
+        string dataSource;
+        
+        using (var connection = new SqlConnection(adminConnectionString))
+        {
+            await connection.OpenAsync();
+            dataSource = connection.DataSource;
+
+            using (var cmd = new SqlCommand($"DROP LOGIN [{oldUsername}];", connection))
+            {
+                try { await cmd.ExecuteNonQueryAsync(); } catch { }
+            }
+
+            using (var cmd = new SqlCommand($"CREATE LOGIN [{newUsername}] WITH PASSWORD = '{newPassword}';", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            using (var cmd = new SqlCommand($"CREATE USER [{newUsername}] FOR LOGIN [{newUsername}];", connection))
+            {
+                try { await cmd.ExecuteNonQueryAsync(); } catch { }
+            }
+
+            using (var cmd = new SqlCommand($"ALTER ROLE db_owner ADD MEMBER [{newUsername}];", connection))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        return new DatabaseConnectionDetails
+        {
+            Host = dataSource,
+            Port = 1433,
+            DatabaseName = databaseName,
+            Username = newUsername,
+            Password = newPassword,
+            Engine = "SQL Server"
+        };
+    }
+
+    private async Task<DatabaseConnectionDetails?> RotateMongoCredentialsAsync(string databaseName, string oldUsername)
+    {
+        var adminConnectionString = _config.GetConnectionString("AdminMongoConnection");
+        var newUsername = $"user_{Guid.NewGuid().ToString().Substring(0, 8)}";
+        var newPassword = GenerateSecurePassword();
+
+        var client = new MongoClient(adminConnectionString);
+        var db = client.GetDatabase("admin");
+        var usersCollection = db.GetCollection<BsonDocument>("system.users");
+
+        try
+        {
+            await db.RunCommandAsync<BsonDocument>(new BsonDocument("dropUser", oldUsername));
+        }
+        catch { }
+
+        await db.RunCommandAsync<BsonDocument>(new BsonDocument
+        {
+            { "createUser", newUsername },
+            { "pwd", newPassword },
+            { "roles", new BsonArray { new BsonDocument { { "role", "readWrite" }, { "db", databaseName } } } }
+        });
+
+        var hostAndPort = adminConnectionString?.Split("@")[1].Split(":") ?? new[] { "localhost", "27017" };
+        
+        return new DatabaseConnectionDetails
+        {
+            Host = hostAndPort[0],
+            Port = 27017,
+            DatabaseName = databaseName,
+            Username = newUsername,
+            Password = newPassword,
+            Engine = "MongoDB"
+        };
+    }
+
+    public string GenerateSecurePassword()
+    {
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%";
+        var random = new Random();
+        return new string(Enumerable.Range(0, 16).Select(_ => chars[random.Next(chars.Length)]).ToArray());
     }
 }

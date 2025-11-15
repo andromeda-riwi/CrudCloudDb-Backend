@@ -83,6 +83,56 @@ public class DatabasesController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>
+    /// Obtener detalles de una base de datos específica
+    /// GET /api/databases/{id}
+    /// </summary>
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetDatabase(Guid id)
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var database = await _context.DatabaseInstances
+            .FirstOrDefaultAsync(db => db.Id == id && db.UserId == userId);
+
+        if (database == null)
+        {
+            return NotFound(new { message = "Base de datos no encontrada." });
+        }
+
+        TimeZoneInfo timeZone;
+        try
+        {
+            timeZone = TZConvert.GetTimeZoneInfo(database.TimeZoneId);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            timeZone = TimeZoneInfo.Utc;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            timeZone = TimeZoneInfo.Utc;
+        }
+
+        var createdAtLocal = TimeZoneInfo.ConvertTimeFromUtc(database.CreatedAt, timeZone);
+
+        var responseDto = new DatabaseResponseDto
+        {
+            Id = database.Id,
+            Name = database.Name,
+            Engine = database.Engine,
+            Status = database.Status,
+            CreatedAt = createdAtLocal,
+            CreatedAtUtc = database.CreatedAt,
+            TimeZoneId = database.TimeZoneId
+        };
+
+        return Ok(responseDto);
+    }
 
     [HttpGet("stats")]
     public async Task<IActionResult> GetDashboardStats()
@@ -283,31 +333,39 @@ public class DatabasesController : ControllerBase
         }
     }
 
-    // --- ENDPOINT PARA OBTENER CREDENCIALES DE UNA BASE DE DATOS ---
-    // Responde a peticiones GET en /api/databases/{id}/credentials
+    /// <summary>
+    /// Obtener credenciales de una base de datos (solo la primera vez)
+    /// GET /api/databases/{id}/credentials
+    /// </summary>
     [HttpGet("{id}/credentials")]
     public async Task<IActionResult> GetDatabaseCredentials(Guid id)
     {
-        // 1. Obtener el ID del usuario del token para seguridad.
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdString == null) return Unauthorized();
         var userId = Guid.Parse(userIdString);
 
-        // 2. Buscar la instancia de la base de datos en nuestra DB de gestión.
         var dbInstance = await _context.DatabaseInstances
             .FirstOrDefaultAsync(db => db.Id == id);
 
-        // 3. Validaciones de seguridad
         if (dbInstance == null)
         {
             return NotFound(new { message = "Base de datos no encontrada." });
         }
+        
         if (dbInstance.UserId != userId)
         {
-            return Forbid(); // La base de datos no pertenece a este usuario
+            return Forbid();
         }
 
-        // 4. Obtener las credenciales de conexión del provisionador
+        // Validación: Si ya fueron vistas, retornar error
+        if (dbInstance.CredentialsViewed)
+        {
+            return BadRequest(new { 
+                message = "Las credenciales ya fueron visualizadas anteriormente. Por razones de seguridad, solo se muestran una vez. Si necesitas acceder nuevamente, usa la rotación de credenciales.",
+                credentialsViewed = true
+            });
+        }
+
         try
         {
             var credentials = await _databaseProvisioner.GetDatabaseCredentialsAsync(
@@ -321,13 +379,20 @@ public class DatabasesController : ControllerBase
                 return StatusCode(500, new { message = "No se pudieron obtener las credenciales." });
             }
 
+            // Marcar credenciales como vistas
+            dbInstance.CredentialsViewed = true;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Credenciales visualizadas para BD {DatabaseId} por usuario {UserId}", id, userId);
+
             return Ok(new
             {
                 host = credentials.Host,
                 port = credentials.Port,
                 databaseName = credentials.DatabaseName,
                 username = credentials.Username,
-                password = credentials.Password
+                password = credentials.Password,
+                message = "⚠️ Estas son tus únicas credenciales. Guárdalas en un lugar seguro. No podrás verlas de nuevo."
             });
         }
         catch (Exception ex)
@@ -338,6 +403,77 @@ public class DatabasesController : ControllerBase
                 message = "Error al obtener las credenciales.",
                 detail = ex.Message
             });
+        }
+    }
+
+    /// <summary>
+    /// Rotar credenciales de una base de datos
+    /// POST /api/databases/{id}/rotate-credentials
+    /// </summary>
+    [HttpPost("{id}/rotate-credentials")]
+    public async Task<IActionResult> RotateDatabaseCredentials(Guid id)
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdString == null) return Unauthorized();
+        var userId = Guid.Parse(userIdString);
+
+        var dbInstance = await _context.DatabaseInstances
+            .FirstOrDefaultAsync(db => db.Id == id && db.UserId == userId);
+
+        if (dbInstance == null)
+        {
+            return NotFound(new { message = "Base de datos no encontrada." });
+        }
+
+        try
+        {
+            var newCredentials = await _databaseProvisioner.RotateDatabaseCredentialsAsync(
+                dbInstance.Engine,
+                dbInstance.Name,
+                dbInstance.DbUsername
+            );
+
+            if (newCredentials == null)
+            {
+                return StatusCode(500, new { message = "No se pudieron generar nuevas credenciales." });
+            }
+
+            dbInstance.CredentialsViewed = false;
+            dbInstance.DbUsername = newCredentials.Username;
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value!;
+                if (!string.IsNullOrEmpty(userEmail))
+                {
+                    await _emailService.SendDatabaseCredentialsAsync(
+                        userEmail,
+                        User.Identity?.Name ?? "Usuario",
+                        newCredentials
+                    );
+                    _logger.LogInformation("Credenciales rotadas para BD {DatabaseId}", id);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al enviar email de credenciales");
+            }
+
+            return Ok(new
+            {
+                message = "Credenciales rotadas. Email enviado.",
+                host = newCredentials.Host,
+                port = newCredentials.Port,
+                databaseName = newCredentials.DatabaseName,
+                username = newCredentials.Username,
+                password = newCredentials.Password
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al rotar credenciales");
+            return StatusCode(500, new { message = "Error al rotar credenciales." });
         }
     }
 
