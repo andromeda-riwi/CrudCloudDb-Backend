@@ -1,16 +1,17 @@
+using CCD.Api.Dtos;
 using CCD.Core.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography; //to improve the security 
+using System.Text;
 using System.Text.Json;
-using System.Security.Cryptography; // <--- Añade esto
-using System.Text;                 // <--- Añade esto
-using Microsoft.Extensions.Primitives; 
+using Microsoft.Extensions.Primitives;
 
 [Route("api/[controller]")]
 [ApiController]
 public class WebhookController : ControllerBase
 {
-    private readonly IPaymentService _paymentService;
+    private readonly IPaymentService _paymentService; //Mercado pago IPaymentService
     private readonly ILogger<WebhookController> _logger;
     private readonly IConfiguration _configuration; // IConfiguration
 
@@ -18,12 +19,12 @@ public class WebhookController : ControllerBase
     {
         _paymentService = paymentService;
         _logger = logger;
-        _configuration = configuration; 
+        _configuration = configuration;
     }
 
     [HttpPost("mercadopago")]
     [AllowAnonymous]
-    public async Task<IActionResult> ReceiveMercadoPagoNotification([FromBody] JsonElement body)
+    public async Task<IActionResult> ReceiveMercadoPagoNotification([FromBody] MercadoPagoNotificationsDto notification)
     {
         // --- Init of firm validation ---
         if (!Request.Headers.TryGetValue("X-Signature", out StringValues signatureHeader))
@@ -35,8 +36,8 @@ public class WebhookController : ControllerBase
         var webhookSecret = _configuration["MercadoPago:WebhookSecret"];
         if (string.IsNullOrEmpty(webhookSecret))
         {
-             _logger.LogError("El Webhook Secret de Mercado Pago no está configurado.");
-             return StatusCode(500, "Configuración del servidor incompleta.");
+            _logger.LogError("El Webhook Secret de Mercado Pago no está configurado.");
+            return StatusCode(500, "Configuración del servidor incompleta.");
         }
 
         // FIRM in format ts=<timestamp>,v1=<hash>
@@ -50,8 +51,7 @@ public class WebhookController : ControllerBase
         }
         
         // manifest of the mercado pago payment
-        var requestTimestamp = Request.Headers["X-Request-Timestamp"].ToString();
-        var manifest = $"id:{body.GetProperty("data").GetProperty("id").GetString()};request-id:{Request.Headers["X-Request-Id"]};ts:{timestamp};";
+        var manifest = $"id:{notification.Data.Id};request-id:{Request.Headers["X-Request-Id"]};ts:{timestamp};"; //this part should be like do get mercado pago by security
 
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(webhookSecret));
         var computedHashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(manifest));
@@ -64,10 +64,10 @@ public class WebhookController : ControllerBase
         }
         // -end validation of the FIRM ---
 
-        _logger.LogInformation("Notificación de Mercado Pago recibida y validada: {Body}", body.ToString());
+        _logger.LogInformation("Notificación de Mercado Pago recibida y validada: {Body}", JsonSerializer.Serialize(notification));
 
-        var topic = body.TryGetProperty("action", out var action) ? action.GetString() : null;
-        var paymentIdString = body.TryGetProperty("data", out var data) && data.TryGetProperty("id", out var id) ? id.GetString() : null;
+        var topic = notification.Action;
+        var paymentIdString = notification.Data?.Id;
 
         if (topic?.StartsWith("payment.") == true && long.TryParse(paymentIdString, out var paymentId))
         {
@@ -78,7 +78,6 @@ public class WebhookController : ControllerBase
         {
             _logger.LogWarning("Notificación no reconocida o sin ID de pago válido.");
         }
-
         return Ok();
     }
 }

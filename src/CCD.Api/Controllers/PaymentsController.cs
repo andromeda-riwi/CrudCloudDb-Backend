@@ -1,9 +1,11 @@
 using System.Security.Claims;
+using CCD.Api.Dtos;
 using CCD.Core.Dtos;
 using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using CreatePreferenceRequestDto = CCD.Core.Dtos.CreatePreferenceRequestDto;
 using Microsoft.EntityFrameworkCore;
 
 namespace CCD.Api.Controllers;
@@ -63,75 +65,23 @@ public class PaymentsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Obtener historial de pagos del usuario
-    /// GET /api/payments/history
-    /// </summary>
-    [HttpGet("history")]
-    public async Task<IActionResult> GetPaymentHistory()
+    [HttpPost("confirm")]
+    public async Task<IActionResult> ConfirmPayment(ConfirmPaymentRequestDto request)
     {
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(userIdString, out var userId))
+        if (!Guid.TryParse(userIdString, out _))
         {
             return Unauthorized(new { message = "Token de usuario inválido." });
         }
 
         try
         {
-            // Obtener el usuario con su información de planes
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Id == userId);
-
-            if (user == null)
-            {
-                return NotFound("Usuario no encontrado.");
-            }
-
-            // TODO: Implementar tabla de PaymentHistory en la BD
-            // Por ahora, retornamos un historial vacío
-            // En el futuro, esto debería traer datos de una tabla de pagos/transacciones
-
-            var paymentHistory = new List<PaymentHistoryDto>();
-
-            return Ok(new
-            {
-                totalPayments = paymentHistory.Count,
-                payments = paymentHistory
-            });
+            await _paymentService.ProcessPaymentNotificationAsync(request.PaymentId);
+            return Ok(new { message = "Pago confirmado. Tu plan se actualizará si el pago está aprobado." });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.LogError(ex, "Error al obtener historial de pagos");
-            return StatusCode(500, new { message = "Error al obtener el historial de pagos." });
-        }
-    }
-
-    /// <summary>
-    /// Obtener planes disponibles
-    /// GET /api/payments/plans
-    /// </summary>
-    [HttpGet("plans")]
-    [AllowAnonymous]
-    public async Task<IActionResult> GetAvailablePlans()
-    {
-        try
-        {
-            var plans = await _context.Plans
-                .Select(p => new
-                {
-                    p.Id,
-                    p.Name,
-                    p.Price,
-                    p.DatabaseLimitPerEngine
-                })
-                .ToListAsync();
-
-            return Ok(plans);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al obtener planes");
-            return StatusCode(500, new { message = "Error al obtener los planes." });
+            return StatusCode(500, new { message = "No fue posible confirmar el pago. Intenta nuevamente o contacta a soporte." });
         }
     }
 }
