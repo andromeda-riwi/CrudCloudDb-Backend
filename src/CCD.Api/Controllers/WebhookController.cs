@@ -45,7 +45,7 @@ public class WebhookController : ControllerBase
         var timestamp = parts.FirstOrDefault(p => p.StartsWith("ts="))?.Substring(3);
         var hash = parts.FirstOrDefault(p => p.StartsWith("v1="))?.Substring(3);
 
-        if (string.IsNullOrEmpty(timestamp) || string.IsNullOrEmpty(hash))
+        if (string.IsNullOrEmpty(timestamp) || string.IsNullOrEmpty(hash) || notification.Data == null)
         {
             return BadRequest("Formato de firma inválido.");
         }

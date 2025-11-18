@@ -904,7 +904,7 @@ public class DatabaseProvisioner : IDatabaseProvisioner
         using (var connection = new NpgsqlConnection(adminConnectionString))
         {
             await connection.OpenAsync();
-            host = connection.Host;
+            host = connection.Host ?? "localhost";
             port = connection.Port;
             
             using (var cmd = new NpgsqlCommand($"DROP ROLE IF EXISTS {oldUsername};", connection))

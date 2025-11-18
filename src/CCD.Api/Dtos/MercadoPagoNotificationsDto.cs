@@ -5,13 +5,13 @@ namespace CCD.Api.Dtos;
 public class MercadoPagoNotificationsDto
 {
     [JsonProperty("action")]
-    public string Action { get; set; }
+    public string? Action { get; set; }
 
     [JsonProperty("api_version")]
-    public string ApiVersion { get; set; }
+    public string? ApiVersion { get; set; }
 
     [JsonProperty("data")]
-    public NotificationData Data { get; set; }
+    public NotificationData? Data { get; set; }
 
     [JsonProperty("date_created")]
     public DateTime DateCreated { get; set; }
@@ -23,7 +23,7 @@ public class MercadoPagoNotificationsDto
     public bool LiveMode { get; set; }
 
     [JsonProperty("type")]
-    public string Type { get; set; }
+    public string? Type { get; set; }
 
     [JsonProperty("user_id")]
     public int UserId { get; set; }
@@ -32,5 +32,5 @@ public class MercadoPagoNotificationsDto
 public class NotificationData
 {
     [JsonProperty("id")]
-    public string Id { get; set; }
+    public string? Id { get; set; }
 }

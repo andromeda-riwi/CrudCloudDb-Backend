@@ -277,7 +277,7 @@ public class DatabasesController : ControllerBase
 
             try
             {
-                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
                 if (!string.IsNullOrEmpty(userEmail))
                 {
                     await _emailService.SendDatabaseCredentialsAsync(
@@ -444,7 +444,8 @@ public class DatabasesController : ControllerBase
 
             try
             {
-                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value!;
+                var emailClaim = User.FindFirst(ClaimTypes.Email);
+                var userEmail = emailClaim?.Value ?? string.Empty;
                 if (!string.IsNullOrEmpty(userEmail))
                 {
                     await _emailService.SendDatabaseCredentialsAsync(
@@ -526,7 +527,7 @@ public class DatabasesController : ControllerBase
         // Enviar correo de notificación de eliminación
         try
         {
-            var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+            var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
             var userName = User.FindFirst(ClaimTypes.Name)?.Value ?? "Usuario";
 
             if (!string.IsNullOrEmpty(userEmail))
