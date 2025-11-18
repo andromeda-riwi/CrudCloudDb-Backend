@@ -13,16 +13,14 @@ public class GlobalExceptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionMiddleware> _logger;
-    private readonly IWebhookService? _webhookService;
 
-    public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger, IWebhookService? webhookService = null)
+    public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
     {
         _next = next;
         _logger = logger;
-        _webhookService = webhookService;
     }
 
-    public async Task InvokeAsync(HttpContext context, IWebhookService? webhookService = null)
+    public async Task InvokeAsync(HttpContext context)
     {
         try
         {
@@ -31,32 +29,6 @@ public class GlobalExceptionMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "Excepción no controlada en {Path}", context.Request.Path);
-            
-            // Disparar webhook de error
-            try
-            {
-                var errorData = new
-                {
-                    eventType = "error.occurred",
-                    timestamp = DateTime.UtcNow,
-                    exception = ex.GetType().Name,
-                    message = ex.Message,
-                    stackTrace = ex.StackTrace,
-                    endpoint = context.Request.Path,
-                    method = context.Request.Method,
-                    traceId = context.TraceIdentifier
-                };
-
-                var service = webhookService ?? _webhookService;
-                if (service != null)
-                {
-                    await service.TriggerWebhooksAsync("error.occurred", errorData);
-                }
-            }
-            catch (Exception webhookEx)
-            {
-                _logger.LogError(webhookEx, "Error al disparar webhook de error");
-            }
 
             await HandleExceptionAsync(context, ex);
         }
