@@ -107,6 +107,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // 3. Configuración del servicio de correo electrónico
 builder.Services.AddScoped<IEmailService, SendGridEmailService>();
 builder.Services.AddScoped<IWebhookService, WebhookService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddHttpClient();
 
 // 3. Registro de Servicios y Repositorios (Inyección de Dependencias)
@@ -187,4 +188,3 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run(); //run the application
-

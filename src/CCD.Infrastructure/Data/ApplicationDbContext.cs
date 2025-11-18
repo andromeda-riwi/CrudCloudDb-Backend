@@ -17,6 +17,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<DatabaseInstance> DatabaseInstances { get; set; }
     public DbSet<Webhook> Webhooks { get; set; }
     public DbSet<WebhookEvent> WebhookEvents { get; set; }
+    public DbSet<AuditLog> AuditLogs { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -70,6 +71,17 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.WebhookId);
             entity.Property(e => e.EventType).IsRequired();
             entity.Property(e => e.Payload).IsRequired();
+        });
+        
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.ToTable("AuditLogs");
+            entity.HasKey(a => a.Id);
+            entity.HasIndex(a => a.UserId);
+            entity.HasIndex(a => a.Timestamp);
+            entity.Property(a => a.Action).IsRequired().HasMaxLength(100);
+            entity.Property(a => a.EntityType).IsRequired().HasMaxLength(50);
+            entity.Property(a => a.IpAddress).HasMaxLength(50);
         });
         
         modelBuilder.Entity<Plan>()

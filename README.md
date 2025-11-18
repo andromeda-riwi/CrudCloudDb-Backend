@@ -26,7 +26,7 @@ Plataforma web tipo Clever Cloud para gestión automatizada de bases de datos en
 
 ---
 
-## ✅ Endpoints Implementados (33 TOTAL)
+## ✅ Endpoints Implementados (37 TOTAL)
 
 ### Autenticación (6)
 - `POST /api/auth/register` - Registrar usuario
@@ -42,13 +42,14 @@ Plataforma web tipo Clever Cloud para gestión automatizada de bases de datos en
 - `POST /api/users/change-password` - Cambiar contraseña
 - `PUT /api/users/profile` - Actualizar perfil
 
-### Bases de Datos (6)
+### Bases de Datos (7)
 - `GET /api/databases` - Listar BD
 - `POST /api/databases` - Crear BD
 - `GET /api/databases/{id}` - Obtener detalles
 - `GET /api/databases/{id}/credentials` - Ver credenciales (1ª vez)
 - `POST /api/databases/{id}/rotate-credentials` - Rotar credenciales
 - `DELETE /api/databases/{id}` - Eliminar BD
+- `GET /api/databases/stats` - Estadísticas del dashboard
 
 ### Pagos (3)
 - `POST /api/payments/preference` - Crear preferencia Mercado Pago
@@ -65,17 +66,18 @@ Plataforma web tipo Clever Cloud para gestión automatizada de bases de datos en
 - `GET /api/webhooks/{id}/history` - Historial de eventos
 - `POST /api/webhooks/{id}/test` - Probar webhook
 
+### Auditoría (2) **✨ NUEVO**
+- `GET /api/audit` - Obtener logs del usuario actual
+- `GET /api/audit/all` - Obtener todos los logs (admin)
+
 ### Error Reporting (2)
 - `POST /api/error-report` - Reportar error
 - `GET /api/error-report/history` - Historial de errores
 
-### Monitoreo (2)
-- `GET /api/health` - Health check
-- `GET /api/health/detailed` - Health detallado
-
-### Sistema (2)
+### Sistema (3)
 - `POST /api/webhook/mercadopago` - Webhook Mercado Pago
-- `GET /api/databases/stats` - Estadísticas
+- `GET /api/health` - Health check básico
+- `GET /api/health/detailed` - Health check detallado
 
 ---
 
@@ -150,19 +152,47 @@ ADMIN_SQLSERVER_CONNECTION=Server=localhost,1433;Database=master;User Id=sa;Pass
 ```
 CCD.Api (Presentación)
 ├── Controllers (8)
+│   ├── AuthController
+│   ├── UsersController
+│   ├── DatabasesController
+│   ├── PaymentsController
+│   ├── WebhooksController
+│   ├── WebhookController (MP)
+│   ├── AuditController ✨ NUEVO
+│   └── ErrorReportController
 ├── Dtos (20+)
 ├── Middleware
+│   └── GlobalExceptionMiddleware
 └── Program.cs
 
 CCD.Core (Lógica de Negocio)
 ├── Interfaces
+│   ├── IAuthRepository
+│   ├── IDatabaseProvisioner
+│   ├── IEmailService
+│   ├── IWebhookService
+│   ├── IAuditService ✨ NUEVO
+│   └── IPaymentService
 ├── Entities
+│   ├── User
+│   ├── Plan
+│   ├── DatabaseInstance
+│   ├── Webhook
+│   ├── WebhookEvent
+│   └── AuditLog ✨ NUEVO
 └── Dtos
 
 CCD.Infrastructure (Datos)
-├── Services (5)
+├── Services (6)
+│   ├── AuthRepository
+│   ├── DatabaseProvisioner
+│   ├── SendGridEmailService
+│   ├── WebhookService
+│   ├── AuditService ✨ NUEVO
+│   └── PaymentService
 ├── Data (EF Core)
-└── Migrations
+│   └── ApplicationDbContext
+└── Migrations (15+)
 ```
 
 ---
@@ -172,11 +202,37 @@ CCD.Infrastructure (Datos)
 ✅ JWT Authentication (24 horas)  
 ✅ Password Hashing (HMACSHA512 + salt)  
 ✅ Email Verification obligatoria  
-✅ CORS configurado  
+✅ CORS configurado para dominios específicos  
 ✅ Global Exception Handler  
 ✅ HTTPS obligatorio  
 ✅ Validación de cuotas por plan  
 ✅ Control de acceso por usuario  
+✅ **Sistema de Auditoría completo** ✨ NUEVO  
+✅ **Validaciones robustas con Regex** ✨ NUEVO  
+✅ **Prevención de SQL Injection**  
+
+---
+
+## ✨ Características Nuevas
+
+### Sistema de Auditoría
+- ✅ Registro de todas las acciones importantes
+- ✅ Logs persistentes en PostgreSQL
+- ✅ Consulta de historial por usuario
+- ✅ IP tracking
+- ✅ Eventos auditados:
+  - `user.registered` - Registro de usuario
+  - `user.login` - Inicio de sesión
+  - `database.created` - Creación de BD
+  - `database.deleted` - Eliminación de BD
+  - `plan.changed` - Cambio de plan
+
+### Validaciones Robustas
+- ✅ Contraseñas fuertes (mínimo 8 caracteres, mayúsculas, minúsculas, números, símbolos)
+- ✅ Validación de emails con formato correcto
+- ✅ Nombres solo con letras y espacios
+- ✅ Motores de BD validados contra lista blanca
+- ✅ Prevención de SQL Injection en nombres de BD  
 
 ---
 

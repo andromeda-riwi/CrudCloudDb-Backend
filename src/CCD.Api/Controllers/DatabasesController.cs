@@ -275,6 +275,7 @@ public class DatabasesController : ControllerBase
             await _context.DatabaseInstances.AddAsync(newDbInstance);
             await _context.SaveChangesAsync();
 
+#pragma warning disable CS8601
             try
             {
                 var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
@@ -294,6 +295,7 @@ public class DatabasesController : ControllerBase
             }
             catch (Exception ex)
             {
+#pragma warning restore CS8601
                 _logger.LogError(ex, "Error al enviar correo con credenciales");
             }
 
@@ -442,6 +444,7 @@ public class DatabasesController : ControllerBase
             dbInstance.DbUsername = newCredentials.Username;
             await _context.SaveChangesAsync();
 
+#pragma warning disable CS8601
             try
             {
                 var emailClaim = User.FindFirst(ClaimTypes.Email);
@@ -460,6 +463,7 @@ public class DatabasesController : ControllerBase
             {
                 _logger.LogError(ex, "Error al enviar email de credenciales");
             }
+#pragma warning restore CS8601
 
             return Ok(new
             {

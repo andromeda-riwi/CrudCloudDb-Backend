@@ -1,4 +1,4 @@
-﻿﻿// --- Imports necesarios para el controlador ---
+﻿﻿﻿// --- Imports necesarios para el controlador ---
 using CCD.Api.Dtos;
 using CCD.Core;
 using CCD.Core.Interfaces;
@@ -7,22 +7,25 @@ using Microsoft.AspNetCore.Mvc;
 namespace CCD.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")] // Ruta base: /api/auth
+[Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthRepository _authRepo;
     private readonly IEmailService _emailService;
+    private readonly IAuditService _auditService;
 
-    public AuthController(IAuthRepository authRepo, IEmailService emailService)
+    public AuthController(IAuthRepository authRepo, IEmailService emailService, IAuditService auditService)
     {
         _authRepo = authRepo;
         _emailService = emailService;
+        _auditService = auditService;
     }
 
-    // --- ENDPOINT DE REGISTRO ---
-    [HttpPost("register")] // Ruta: POST /api/auth/register
+    [HttpPost("register")]
     public async Task<IActionResult> Register(UserRegisterDto request)
     {
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        
         var userToCreate = new User
         {
             Name = request.Name,
@@ -38,45 +41,41 @@ public class AuthController : ControllerBase
             return BadRequest("El correo electrónico o nombre de usuario ya está en uso.");
         }
 
+        await _auditService.LogAsync(
+            "user.registered",
+            "User",
+            createdUser.Id.ToString(),
+            createdUser.Id,
+            $"Usuario registrado: {createdUser.Email}",
+            ipAddress
+        );
+
         return Ok(new { message = "Usuario registrado exitosamente." });
     }
 
 
     // ▼▼▼ ESTE ES EL NUEVO MÉTODO QUE ESTÁS AÑADIENDO ▼▼▼
     
-    // --- ENDPOINT DE LOGIN ---
-    [HttpPost("login")] // Ruta: POST /api/auth/login
+    [HttpPost("login")]
     public async Task<IActionResult> Login(UserLoginDto request)
     {
-        // Determinar si se está usando email o username
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         string identifier = !string.IsNullOrEmpty(request.Email) ? request.Email : request.UserName ?? "";
         string loginType = !string.IsNullOrEmpty(request.Email) ? "email" : "username";
         
         Console.WriteLine($"[LOGIN] Intento de login con {loginType}: {identifier}");
         
-        // Validar que al menos uno esté presente
         if (string.IsNullOrEmpty(identifier))
         {
             return BadRequest(new { message = "Debes proporcionar un email o nombre de usuario." });
         }
         
-        // Intentar login primero (verifica contraseña y estado de verificación)
-        // El método Login verifica:
-        // 1. Si el usuario existe
-        // 2. Si la contraseña es correcta
-        // 3. Si el email está verificado (OBLIGATORIO)
         var token = await _authRepo.Login(identifier, request.Password, loginType == "email");
 
-        // Si el repositorio devuelve null, puede ser por:
-        // 1. Usuario no encontrado
-        // 2. Contraseña incorrecta  
-        // 3. Email no verificado (contraseña correcta pero email sin verificar)
         if (token == null)
         {
             Console.WriteLine($"[LOGIN] Login fallido para: {identifier}");
             
-            // Verificar si el usuario existe y su estado de verificación
-            // Esto nos permite dar un mensaje más claro cuando el email no está verificado
             User? user = null;
             if (loginType == "email")
             {
@@ -87,10 +86,6 @@ public class AuthController : ControllerBase
                 user = await _authRepo.GetUserByUserNameAsync(identifier);
             }
             
-            // Si el usuario existe pero no está verificado, dar mensaje específico
-            // NOTA: Login verifica la contraseña ANTES de verificar el estado, entonces
-            // si llegamos aquí y el usuario existe y no está verificado, la contraseña
-            // probablemente es correcta (aunque no podemos estar 100% seguros por seguridad)
             if (user != null && !user.EmailVerified)
             {
                 return Unauthorized(new { 
@@ -99,13 +94,33 @@ public class AuthController : ControllerBase
                 });
             }
             
-            // Si llegamos aquí, las credenciales son inválidas
-            // (usuario no existe o contraseña incorrecta)
             return Unauthorized(new { message = "Credenciales inválidas." });
         }
 
+        // Obtener usuario para auditoría
+        User? loggedUser = null;
+        if (loginType == "email")
+        {
+            loggedUser = await _authRepo.GetUserByEmailAsync(identifier);
+        }
+        else
+        {
+            loggedUser = await _authRepo.GetUserByUserNameAsync(identifier);
+        }
+
+        if (loggedUser != null)
+        {
+            await _auditService.LogAsync(
+                "user.login",
+                "User",
+                loggedUser.Id.ToString(),
+                loggedUser.Id,
+                $"Usuario inició sesión: {loggedUser.Email}",
+                ipAddress
+            );
+        }
+
         Console.WriteLine($"[LOGIN] Login exitoso para: {identifier}");
-        // El email está verificado (si no, no llegamos aquí porque Login bloquea el acceso)
         return Ok(new { 
             token,
             emailVerified = true
