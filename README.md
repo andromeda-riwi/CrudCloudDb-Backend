@@ -1313,8 +1313,7 @@ dotnet ef database update --project src/CCD.Infrastructure --startup-project src
 
 ## 👥 Equipo
 
-- **Backend Developer**: [Tu Nombre]
-- **Fecha**: 20 de Noviembre de 2025
+- **Backend Developer**:Andromeda
 - **Versión**: 1.0.0
 
 ---
