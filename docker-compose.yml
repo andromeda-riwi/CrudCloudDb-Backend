@@ -27,7 +27,7 @@
          SendGrid__FromEmail: ${SENDGRID_FROM_EMAIL:-no-reply@example.com}
          SendGrid__FromName: ${SENDGRID_FROM_NAME:-ApexDb Team}
 
-         App__DashboardUrl: ${APP_DASHBOARD_URL:-https://andromeda.andrescortes.dev/dashboard}
+         App__DashboardUrl: ${APP_DASHBOARD_URL:-https://andromeda.andrescortes.dev}
        volumes:
          - ./logs:/app/logs
        networks:

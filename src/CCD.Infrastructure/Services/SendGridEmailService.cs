@@ -23,7 +23,7 @@ namespace CCD.Infrastructure.Services
             _apiKey = config["SendGrid:ApiKey"];
             _fromEmail = config["SendGrid:FromEmail"] ?? "no-reply@apexdb.com";
             _fromName = config["SendGrid:FromName"] ?? "ApexDb Team";
-            _dashboardUrl = config["App:DashboardUrl"] ?? "https://app.apexdb.com/dashboard";
+            _dashboardUrl = config["App:DashboardUrl"] ?? "https://andromeda.andrescortes.dev";
             _logger = logger;
 
             if (string.IsNullOrEmpty(_apiKey))
