@@ -1,24 +1,87 @@
 using System.Text;
+using CCD.Api.Middleware;
 using CCD.Core.Interfaces;
 using CCD.Infrastructure.Data;
 using CCD.Infrastructure.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.JwtBearer; //to add authentication of the API with JWTBearer
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using MercadoPago.Config;
+using DotNetEnv;
+
+// Cargar .env automáticamente (busca hacia arriba en el árbol de directorios)
+// Busca desde el directorio actual (src/CCD.Api) hasta la raíz del proyecto
+Env.TraversePath().Load();
+Console.WriteLine("Variables de entorno cargadas desde .env");
+
+// Convertir variables del formato .env al formato ASP.NET Core (con doble guion bajo)
+var envVarMappings = new Dictionary<string, string>
+{
+    ["MERCADOPAGO_ACCESS_TOKEN"] = "MercadoPago__AccessToken",
+    ["MERCADOPAGO_WEBHOOK_SECRET"] = "MercadoPago__WebhookSecret",
+    ["JWT_SECRET_TOKEN"] = "AppSettings__Token",
+    ["DEFAULT_CONNECTION"] = "ConnectionStrings__DefaultConnection",
+    ["ADMIN_POSTGRES_CONNECTION"] = "ConnectionStrings__AdminPostgresConnection",
+    ["ADMIN_MYSQL_CONNECTION"] = "ConnectionStrings__AdminMySqlConnection",
+    ["ADMIN_SQLSERVER_CONNECTION"] = "ConnectionStrings__AdminSqlServerConnection",
+    ["ADMIN_MONGO_CONNECTION"] = "ConnectionStrings__AdminMongoConnection",
+    ["SENDGRID_API_KEY"] = "SendGrid__ApiKey",
+    ["SENDGRID_FROM_EMAIL"] = "SendGrid__FromEmail",
+    ["SENDGRID_FROM_NAME"] = "SendGrid__FromName",
+    ["APP_DASHBOARD_URL"] = "App__DashboardUrl",
+    // ASPNETCORE_* ya están en el formato correcto, solo asegurarse que existan
+    ["ASPNETCORE_ENVIRONMENT"] = "ASPNETCORE_ENVIRONMENT",
+    ["ASPNETCORE_URLS"] = "ASPNETCORE_URLS"
+};
+
+foreach (var (original, aspnetCore) in envVarMappings)
+{
+    var value = Environment.GetEnvironmentVariable(original);
+    if (!string.IsNullOrEmpty(value))
+    {
+        Environment.SetEnvironmentVariable(aspnetCore, value);
+        Console.WriteLine($"  ✓ {aspnetCore} configurado");
+    }
+}
+
+// Valores por defecto si no están definidos
+if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")))
+{
+    Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Development");
+}
+if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+{
+    // Usar localhost para acceso local, o + para todas las interfaces
+    Environment.SetEnvironmentVariable("ASPNETCORE_URLS", "http://localhost:5063");
+}
+
+// Cargar variables de entorno desde el archivo .env
+var envPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", ".env");
+if (File.Exists(envPath))
+{
+    DotNetEnv.Env.Load(envPath);
+    Console.WriteLine($"✅ Archivo .env cargado desde: {envPath}");
+}
+else
+{
+    Console.WriteLine($"⚠️ No se encontró el archivo .env en: {envPath}");
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Sobrescribir la configuración con las variables de entorno cargadas
+builder.Configuration.AddEnvironmentVariables();
 
-var mercadoPagoAccessToken = builder.Configuration["MercadoPago:AccessToken"];
+
+var mercadoPagoAccessToken = builder.Configuration["MercadoPago:AccessToken"]; //create a configuration of the mercado pago token
 if (string.IsNullOrEmpty(mercadoPagoAccessToken))
 {
     throw new Exception("El Access Token de Mercado Pago no está configurado. Asegúrate de definir la variable de entorno 'MercadoPago__AccessToken'.");
 }
-MercadoPagoConfig.AccessToken = mercadoPagoAccessToken;
+MercadoPagoConfig.AccessToken = mercadoPagoAccessToken; //storage in the mercado pago var the access token
 
 
-var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
+var MyAllowSpecificOrigins = "_myAllowSpecificOrigins"; //cors configuration
 
 
 builder.Services.AddCors(options =>
@@ -26,33 +89,39 @@ builder.Services.AddCors(options =>
     options.AddPolicy(name: MyAllowSpecificOrigins,
                       policy =>
                       {
-                          policy.WithOrigins("http://localhost:5173",
-                                           "http://localhost:8080",
-                                           "https://andromeda.andrescortes.dev")
+                          policy.WithOrigins(
+                                "http://localhost:3000",
+                                "http://localhost:5173",
+                                "http://localhost:8080",
+                                "https://andromeda.andrescortes.dev")
                                 .AllowAnyHeader()
-                                .AllowAnyMethod();
+                                .AllowAnyMethod()
+                                .AllowCredentials();
                       });
 });
 
-// 2. Configuración de la base de datos
+// 2. Configuración de la base de datos 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // 3. Configuración del servicio de correo electrónico
 builder.Services.AddScoped<IEmailService, SendGridEmailService>();
+builder.Services.AddScoped<IWebhookService, WebhookService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddHttpClient();
 
 // 3. Registro de Servicios y Repositorios (Inyección de Dependencias)
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IDatabaseProvisioner, DatabaseProvisioner>();
 // A medida que crees más servicios (pagos, correos), los registrarás aquí.
-builder.Services.AddScoped<IPaymentService, PaymentService>(); 
+builder.Services.AddScoped<IPaymentService, PaymentService>(); //Mercado pago Ipayment services 
 // 4. Configuración de los Controladores de la API
 builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme //configuration of the jwtbearer and authorization
     {
         Name = "Authorization",
         Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
@@ -83,7 +152,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         var tokenKeyString = builder.Configuration.GetSection("AppSettings:Token").Value;
         
-        if (string.IsNullOrEmpty(tokenKeyString))
+        if (string.IsNullOrEmpty(tokenKeyString)) //expected error
             throw new Exception("La clave del token 'AppSettings:Token' no está configurada.");
 
         options.TokenValidationParameters = new TokenValidationParameters
@@ -99,14 +168,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 var app = builder.Build();
 
 
-app.UseSwagger();
+app.UseSwagger(); //to use swagger and make endpoints with interface in the web
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "CCD API v1");
     c.RoutePrefix = string.Empty; 
 });
 
-app.UseHttpsRedirection();
+app.UseHttpsRedirection(); //to use https
+
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseCors(MyAllowSpecificOrigins);
 
@@ -116,4 +187,4 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.Run();
+app.Run(); //run the application

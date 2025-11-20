@@ -2,11 +2,15 @@
   "AppSettings": {
     "Token": "REEMPLAZA_CON_TOKEN_SEGURO"
   },
+  "App": {
+    "DashboardUrl": "http://localhost:5173"
+  },
   "ConnectionStrings": {
     "DefaultConnection": "Server=TU_SERVIDOR;Port=5432;Database=ccd_dev_db;User Id=TU_USUARIO;Password=TU_PASSWORD",
     "AdminPostgresConnection": "Host=TU_SERVIDOR;Port=5432;Database=postgres;Username=TU_USUARIO;Password=TU_PASSWORD",
     "AdminMySqlConnection": "Server=TU_SERVIDOR;Port=3306;Database=mysql;User Id=TU_USUARIO;Password=TU_PASSWORD",
-    "AdminSqlServerConnection": "Server=TU_SERVIDOR,1433;Database=master;User Id=TU_USUARIO;Password=TU_PASSWORD;TrustServerCertificate=True"
+    "AdminSqlServerConnection": "Server=TU_SERVIDOR,1433;Database=master;User Id=TU_USUARIO;Password=TU_PASSWORD;TrustServerCertificate=True",
+    "AdminMongoConnection": "mongodb://TU_USUARIO:TU_PASSWORD@TU_SERVIDOR:27017"
   },
   "SendGrid": {
     "ApiKey": "REEMPLAZA_CON_API_KEY",

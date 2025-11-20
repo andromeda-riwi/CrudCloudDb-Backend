@@ -1,4 +1,4 @@
-﻿﻿// --- Imports necesarios ---
+﻿// --- Imports necesarios ---
 using System.Security.Claims;
 using CCD.Api.Dtos;
 using CCD.Core; 
@@ -83,6 +83,56 @@ public class DatabasesController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>
+    /// Obtener detalles de una base de datos específica
+    /// GET /api/databases/{id}
+    /// </summary>
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetDatabase(Guid id)
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var database = await _context.DatabaseInstances
+            .FirstOrDefaultAsync(db => db.Id == id && db.UserId == userId);
+
+        if (database == null)
+        {
+            return NotFound(new { message = "Base de datos no encontrada." });
+        }
+
+        TimeZoneInfo timeZone;
+        try
+        {
+            timeZone = TZConvert.GetTimeZoneInfo(database.TimeZoneId);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            timeZone = TimeZoneInfo.Utc;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            timeZone = TimeZoneInfo.Utc;
+        }
+
+        var createdAtLocal = TimeZoneInfo.ConvertTimeFromUtc(database.CreatedAt, timeZone);
+
+        var responseDto = new DatabaseResponseDto
+        {
+            Id = database.Id,
+            Name = database.Name,
+            Engine = database.Engine,
+            Status = database.Status,
+            CreatedAt = createdAtLocal,
+            CreatedAtUtc = database.CreatedAt,
+            TimeZoneId = database.TimeZoneId
+        };
+
+        return Ok(responseDto);
+    }
 
     [HttpGet("stats")]
     public async Task<IActionResult> GetDashboardStats()
@@ -121,8 +171,8 @@ public class DatabasesController : ControllerBase
         var monthlyPrice = user.Plan?.Price ?? 0;
 
         // Calcular el número de motores disponibles (PostgreSQL, MySQL, MongoDB, etc.)
-        // Por ahora, asumimos 3 motores principales
-        const int availableEngines = 6; // PostgreSQL, MySQL, MongoDB, MariaDB, Redis, SQLite
+        // Por ahora, asumimos 4 motores principales
+        const int availableEngines = 4; // PostgreSQL, MySQL, MongoDB, SQLServer
         var maxTotalDatabases = maxDatabasesPerEngine * availableEngines;
 
         // 6. Retornar estadísticas
@@ -142,7 +192,7 @@ public class DatabasesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateDatabase(DatabaseCreateDto createDto)
     {
-        
+
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdString == null)
         {
@@ -191,10 +241,10 @@ public class DatabasesController : ControllerBase
         {
             return BadRequest(new { message = $"Has alcanzado el límite de {databaseLimitPerEngine} bases de datos para el motor {createDto.Engine} en tu plan {planName}. Mejora tu plan para crear más bases de datos." });
         }
-   
+
         try
         {
-            
+
             var connectionDetails = await _databaseProvisioner.CreateDatabaseAsync(createDto.Engine, userId);
 
             if (connectionDetails == null)
@@ -202,7 +252,7 @@ public class DatabasesController : ControllerBase
                 return StatusCode(500, new { message = "Error inesperado al crear la base de datos." });
             }
 
-            
+
             if (string.IsNullOrEmpty(connectionDetails.DatabaseName) ||
                 string.IsNullOrEmpty(createDto.Engine) ||
                 string.IsNullOrEmpty(connectionDetails.Username))
@@ -210,24 +260,25 @@ public class DatabasesController : ControllerBase
                 return StatusCode(500, new { message = "Error: No se pudieron generar todas las credenciales necesarias." });
             }
 
-            
+
             var newDbInstance = new DatabaseInstance
             {
-                Name = connectionDetails.DatabaseName,  
-                Engine = createDto.Engine,              
-                Status = "Active",                      
-                DbUsername = connectionDetails.Username, 
-                UserId = userId,                       
+                Name = connectionDetails.DatabaseName,
+                Engine = createDto.Engine,
+                Status = "Active",
+                DbUsername = connectionDetails.Username,
+                UserId = userId,
                 CreatedAt = DateTime.UtcNow,
                 TimeZoneId = normalizedTimeZoneId
             };
 
             await _context.DatabaseInstances.AddAsync(newDbInstance);
             await _context.SaveChangesAsync();
-            
+
+#pragma warning disable CS8601
             try
             {
-                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value;
+                var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
                 if (!string.IsNullOrEmpty(userEmail))
                 {
                     await _emailService.SendDatabaseCredentialsAsync(
@@ -244,10 +295,11 @@ public class DatabasesController : ControllerBase
             }
             catch (Exception ex)
             {
+#pragma warning restore CS8601
                 _logger.LogError(ex, "Error al enviar correo con credenciales");
             }
 
-           
+
             if (connectionDetails.Host == null || connectionDetails.Username == null || connectionDetails.Password == null)
             {
                 _logger.LogError("No se pudieron obtener todas las credenciales de conexión");
@@ -283,31 +335,39 @@ public class DatabasesController : ControllerBase
         }
     }
 
-    // --- ENDPOINT PARA OBTENER CREDENCIALES DE UNA BASE DE DATOS ---
-    // Responde a peticiones GET en /api/databases/{id}/credentials
+    /// <summary>
+    /// Obtener credenciales de una base de datos (solo la primera vez)
+    /// GET /api/databases/{id}/credentials
+    /// </summary>
     [HttpGet("{id}/credentials")]
     public async Task<IActionResult> GetDatabaseCredentials(Guid id)
     {
-        // 1. Obtener el ID del usuario del token para seguridad.
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdString == null) return Unauthorized();
         var userId = Guid.Parse(userIdString);
 
-        // 2. Buscar la instancia de la base de datos en nuestra DB de gestión.
         var dbInstance = await _context.DatabaseInstances
             .FirstOrDefaultAsync(db => db.Id == id);
 
-        // 3. Validaciones de seguridad
         if (dbInstance == null)
         {
             return NotFound(new { message = "Base de datos no encontrada." });
         }
+
         if (dbInstance.UserId != userId)
         {
-            return Forbid(); // La base de datos no pertenece a este usuario
+            return Forbid();
         }
 
-        // 4. Obtener las credenciales de conexión del provisionador
+        // Validación: Si ya fueron vistas, retornar error
+        if (dbInstance.CredentialsViewed)
+        {
+            return BadRequest(new {
+                message = "Las credenciales ya fueron visualizadas anteriormente. Por razones de seguridad, solo se muestran una vez. Si necesitas acceder nuevamente, usa la rotación de credenciales.",
+                credentialsViewed = true
+            });
+        }
+
         try
         {
             var credentials = await _databaseProvisioner.GetDatabaseCredentialsAsync(
@@ -321,13 +381,20 @@ public class DatabasesController : ControllerBase
                 return StatusCode(500, new { message = "No se pudieron obtener las credenciales." });
             }
 
+            // Marcar credenciales como vistas
+            dbInstance.CredentialsViewed = true;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Credenciales visualizadas para BD {DatabaseId} por usuario {UserId}", id, userId);
+
             return Ok(new
             {
                 host = credentials.Host,
                 port = credentials.Port,
                 databaseName = credentials.DatabaseName,
                 username = credentials.Username,
-                password = credentials.Password
+                password = credentials.Password,
+                message = "⚠️ Estas son tus únicas credenciales. Guárdalas en un lugar seguro. No podrás verlas de nuevo."
             });
         }
         catch (Exception ex)
@@ -341,6 +408,80 @@ public class DatabasesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Rotar credenciales de una base de datos
+    /// POST /api/databases/{id}/rotate-credentials
+    /// </summary>
+    [HttpPost("{id}/rotate-credentials")]
+    public async Task<IActionResult> RotateDatabaseCredentials(Guid id)
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userIdString == null) return Unauthorized();
+        var userId = Guid.Parse(userIdString);
+
+        var dbInstance = await _context.DatabaseInstances
+            .FirstOrDefaultAsync(db => db.Id == id && db.UserId == userId);
+
+        if (dbInstance == null)
+        {
+            return NotFound(new { message = "Base de datos no encontrada." });
+        }
+
+        try
+        {
+            var newCredentials = await _databaseProvisioner.RotateDatabaseCredentialsAsync(
+                dbInstance.Engine,
+                dbInstance.Name,
+                dbInstance.DbUsername
+            );
+
+            if (newCredentials == null)
+            {
+                return StatusCode(500, new { message = "No se pudieron generar nuevas credenciales." });
+            }
+
+            dbInstance.CredentialsViewed = false;
+            dbInstance.DbUsername = newCredentials.Username;
+            await _context.SaveChangesAsync();
+
+#pragma warning disable CS8601
+            try
+            {
+                var emailClaim = User.FindFirst(ClaimTypes.Email);
+                var userEmail = emailClaim?.Value ?? string.Empty;
+                if (!string.IsNullOrEmpty(userEmail))
+                {
+                    await _emailService.SendDatabaseCredentialsAsync(
+                        userEmail,
+                        User.Identity?.Name ?? "Usuario",
+                        newCredentials
+                    );
+                    _logger.LogInformation("Credenciales rotadas para BD {DatabaseId}", id);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al enviar email de credenciales");
+            }
+#pragma warning restore CS8601
+
+            return Ok(new
+            {
+                message = "Credenciales rotadas. Email enviado.",
+                host = newCredentials.Host,
+                port = newCredentials.Port,
+                databaseName = newCredentials.DatabaseName,
+                username = newCredentials.Username,
+                password = newCredentials.Password
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al rotar credenciales");
+            return StatusCode(500, new { message = "Error al rotar credenciales." });
+        }
+    }
+
     // --- ENDPOINT PARA ELIMINAR UNA BASE DE DATOS ---
     // Responde a peticiones DELETE en /api/databases/some-guid-id
     [HttpDelete("{id}")]
@@ -349,19 +490,19 @@ public class DatabasesController : ControllerBase
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userIdString == null) return Unauthorized();
         var userId = Guid.Parse(userIdString);
-        
+
         var dbInstance = await _context.DatabaseInstances
             .FirstOrDefaultAsync(db => db.Id == id);
-        
+
         if (dbInstance == null)
         {
-            return NotFound(); 
+            return NotFound();
         }
         if (dbInstance.UserId != userId)
         {
-            return Forbid(); 
+            return Forbid();
         }
-        
+
         try
         {
             var deleted = await _databaseProvisioner.DeleteDatabaseAsync(
@@ -386,6 +527,33 @@ public class DatabasesController : ControllerBase
 
         _context.DatabaseInstances.Remove(dbInstance);
         await _context.SaveChangesAsync();
+
+        // Enviar correo de notificación de eliminación
+        try
+        {
+            var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
+            var userName = User.FindFirst(ClaimTypes.Name)?.Value ?? "Usuario";
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                await _emailService.SendDatabaseDeletionEmailAsync(
+                    userEmail,
+                    userName,
+                    dbInstance.Name,
+                    dbInstance.Engine);
+
+                _logger.LogInformation($"Correo de eliminación enviado a {userEmail}");
+            }
+            else
+            {
+                _logger.LogWarning("No se pudo obtener el correo del usuario para enviar notificación de eliminación");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar correo de notificación de eliminación");
+            // No fallar la eliminación si el correo no se puede enviar
+        }
 
         return NoContent();
     }
