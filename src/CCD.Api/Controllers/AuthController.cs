@@ -143,7 +143,10 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Token de verificación inválido o expirado." });
         }
 
-        return Ok(new { message = "Email verificado exitosamente." });
+        return Ok(new { 
+            message = "Email verificado exitosamente. Por favor inicia sesión.",
+            redirectTo = "/login"
+        });
     }
 
     // --- ENDPOINT PARA REENVIAR VERIFICACIÓN ---
