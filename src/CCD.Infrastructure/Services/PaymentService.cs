@@ -5,6 +5,7 @@ using MercadoPago.Client.Payment;
 using MercadoPago.Client.Preference;
 using MercadoPago.Resource.Preference;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging; 
 
 namespace CCD.Infrastructure.Services;
@@ -14,12 +15,18 @@ public class PaymentService : IPaymentService
     private readonly ApplicationDbContext _context;
     private readonly ILogger<PaymentService> _logger;
     private readonly IEmailService _emailService;
+    private readonly IConfiguration _configuration;
     
-    public PaymentService(ApplicationDbContext context, ILogger<PaymentService> logger, IEmailService emailService)
+    public PaymentService(
+        ApplicationDbContext context, 
+        ILogger<PaymentService> logger, 
+        IEmailService emailService,
+        IConfiguration configuration)
     {
         _context = context;
         _logger = logger;
         _emailService = emailService;
+        _configuration = configuration;
     }
     
     public async Task<CreatePreferenceResponseDto?> CreatePreferenceAsync(int planId, Guid userId)
@@ -49,6 +56,10 @@ public class PaymentService : IPaymentService
         _logger.LogInformation("✅ Plan encontrado: {PlanName} - Precio: ${Price} COP", plan.Name, plan.Price);
         _logger.LogInformation("✅ Usuario encontrado: {Email}", user.Email);
 
+        // Obtener URL del dashboard desde configuración
+        var dashboardUrl = _configuration["App:DashboardUrl"] ?? "https://andromeda.andrescortes.dev/dashboard";
+        _logger.LogInformation("🔗 Dashboard URL: {DashboardUrl}", dashboardUrl);
+
         var request = new PreferenceRequest
         {
             Items = new List<PreferenceItemRequest>
@@ -69,9 +80,9 @@ public class PaymentService : IPaymentService
             },
             BackUrls = new PreferenceBackUrlsRequest
             {
-                Success = "https://andromeda.andrescortes.dev/dashboard?payment_status=success",
-                Failure = "https://andromeda.andrescortes.dev/dashboard?payment_status=failure",
-                Pending = "https://andromeda.andrescortes.dev/dashboard?payment_status=pending"
+                Success = $"{dashboardUrl}?payment_status=success",
+                Failure = $"{dashboardUrl}?payment_status=failure",
+                Pending = $"{dashboardUrl}?payment_status=pending"
             },
             AutoReturn = "approved",
             ExternalReference = user.Id.ToString(),
