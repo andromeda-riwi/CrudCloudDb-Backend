@@ -19,19 +19,22 @@ public class DatabasesController : ControllerBase
     private readonly IDatabaseProvisioner _databaseProvisioner;
     private readonly IEmailService _emailService;
     private readonly ILogger<DatabasesController> _logger;
+    private readonly IAuditService _auditService;
     
     public DatabasesController(
         IConfiguration config,
         ApplicationDbContext context,
         IDatabaseProvisioner databaseProvisioner,
         IEmailService emailService,
-        ILogger<DatabasesController> logger)
+        ILogger<DatabasesController> logger,
+        IAuditService auditService)
     {
         _config = config;
         _context = context;
         _databaseProvisioner = databaseProvisioner;
         _emailService = emailService;
         _logger = logger;
+        _auditService = auditService;
     }
     
     [HttpGet]
@@ -274,6 +277,15 @@ public class DatabasesController : ControllerBase
 
             await _context.DatabaseInstances.AddAsync(newDbInstance);
             await _context.SaveChangesAsync();
+
+            await _auditService.LogAsync(
+                "database.created",
+                nameof(DatabaseInstance),
+                newDbInstance.Id.ToString(),
+                userId,
+                $"Base de datos creada: {newDbInstance.Name} ({newDbInstance.Engine})",
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"
+            );
 
 #pragma warning disable CS8601
             try
