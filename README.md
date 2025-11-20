@@ -246,10 +246,8 @@ El sistema utiliza múltiples bases de datos:
 | Plan | Bases de Datos | Precio | Estado |
 |------|----------------|--------|--------|
 | **Gratuito** | 2 por motor | Gratis | Asignado automáticamente al registrarse |
-| **Intermedio** | 5 por motor | $5,000 COP | Mediante pago en Mercado Pago |
-| **Avanzado** | 10 por motor | $10,000 COP | Mediante pago en Mercado Pago |
-
-**Nota**: El sistema acepta pagos únicos, NO suscripciones recurrentes.
+| **Intermedio** | 5 por motor | $5,000 COP | Pago único mediante Mercado Pago |
+| **Avanzado** | 10 por motor | $10,000 COP | Pago único mediante Mercado Pago |
 
 ### ✅ Integración con Mercado Pago
 
@@ -275,11 +273,7 @@ Los usuarios pueden configurar **webhooks personalizados** para recibir notifica
 - ✅ Historial completo de envíos
 - ✅ Activar/desactivar individualmente
 - ✅ Probar webhook manualmente
-
-**⚠️ Importante**: Los webhooks están completamente implementados en el backend con 8 endpoints funcionales, pero **NO tienen interfaz de usuario en el frontend**. Se gestionan mediante:
-- Swagger UI
-- Postman o herramientas similares
-- Llamadas directas a la API
+- ✅ Gestión mediante Swagger UI o Postman
 
 ### ✅ Sistema de Emails Automatizados
 
@@ -419,7 +413,6 @@ GET    /api/webhooks/{id}/history      # Historial de eventos del webhook
 POST   /api/webhooks/{id}/test         # Probar webhook manualmente
 ```
 
-**⚠️ Solo disponibles por API (Swagger/Postman), sin UI en frontend**
 
 ### 📊 Auditoría (2 endpoints)
 
@@ -698,10 +691,6 @@ El sistema valida automáticamente:
 4. Crear usuario vinculado al login
 5. Asignar rol `db_owner`
 
-### No Soportados ❌
-
-- **Redis**: No implementado
-- **Cassandra**: No implementado
 
 ---
 
@@ -1213,93 +1202,6 @@ Los logs se muestran automáticamente en la consola al ejecutar `dotnet run`.
 
 ---
 
-## 🚨 Troubleshooting
-
-### Problema: SQL Server no acepta conexiones
-
-**Síntomas:**
-```
-Error: "Connection refused: getsockopt"
-```
-
-**Solución:**
-```bash
-# 1. Verificar que el contenedor está corriendo
-docker ps | grep sqlserver
-
-# 2. Si no está corriendo, limitar memoria e iniciar
-docker update --memory 768m --memory-swap 768m sqlserver2022
-docker start sqlserver2022
-
-# 3. Verificar logs
-docker logs sqlserver2022 --tail 50
-
-# 4. Verificar puerto
-netstat -tuln | grep 1433
-```
-
-### Problema: Alto uso de memoria
-
-**Síntomas:**
-- Servidor lento
-- `free -h` muestra >90% memoria usada
-
-**Solución:**
-```bash
-# 1. Verificar memoria
-free -h
-
-# 2. Limpiar caché
-sudo sync && sudo sysctl -w vm.drop_caches=3
-
-# 3. Verificar SWAP
-swapon --show
-
-# 4. Si no hay SWAP, crear uno
-sudo fallocate -l 2G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-
-# 5. Limitar contenedores
-docker update --memory 512m --memory-swap 512m mysql_server && docker restart mysql_server
-docker update --memory 256m --memory-swap 256m mongodb_server && docker restart mongodb_server
-docker update --memory 512m --memory-swap 512m postgres_server && docker restart postgres_server
-docker update --memory 768m --memory-swap 768m sqlserver2022 && docker restart sqlserver2022
-```
-
-### Problema: Error al crear migraciones
-
-**Síntomas:**
-```
-Unable to create an object of type 'ApplicationDbContext'
-```
-
-**Solución:**
-```bash
-# 1. Instalar herramienta EF Core
-dotnet tool install --global dotnet-ef
-
-# 2. Restaurar herramientas
-dotnet tool restore
-
-# 3. Crear migración
-dotnet ef migrations add NombreMigracion --project src/CCD.Infrastructure --startup-project src/CCD.Api
-
-# 4. Aplicar migración
-dotnet ef database update --project src/CCD.Infrastructure --startup-project src/CCD.Api
-```
-
-### Problema: Webhooks no se envían
-
-**Verificar:**
-1. URL del webhook es accesible públicamente
-2. Webhook está activo (`isActive: true`)
-3. Eventos configurados correctamente
-4. Ver logs: `docker logs -f ccd_api | grep "WebhookService"`
-
----
 
 ## 📚 Documentación Adicional
 
@@ -1308,12 +1210,14 @@ dotnet ef database update --project src/CCD.Infrastructure --startup-project src
   - Casos de uso
   - Diagrama de clases
   - Diagrama de flujo
+- **Corrección Sistema de Pagos**: `CORRECCION_CAMBIO_PLAN.md`
 
 ---
 
 ## 👥 Equipo
 
-- **Backend Developer**:Andromeda
+- **Backend Developer**: Andromeda Team
+- **Fecha**: 20 de Noviembre de 2025
 - **Versión**: 1.0.0
 
 ---
@@ -1329,22 +1233,17 @@ Este proyecto es parte de un trabajo académico de la plataforma CrudCloudDb.
 | Aspecto | Estado |
 |---------|--------|
 | Backend API | ✅ 100% Completo |
-| Endpoints | ✅ 31/31 Implementados |
+| Endpoints | ✅ 31 Implementados |
 | Seguridad | ✅ JWT, Hash, CORS, HTTPS |
 | Integraciones | ✅ Mercado Pago, SendGrid |
-| Webhooks | ✅ 8 Endpoints (sin UI frontend) |
+| Webhooks Personalizados | ✅ 8 Endpoints disponibles por API |
 | Bases de Datos | ✅ PostgreSQL, MySQL, MongoDB, SQL Server |
 | Auditoría | ✅ Completa |
 | Testing | ✅ Swagger disponible |
 | Producción | ✅ Desplegado |
 | Documentación | ✅ Completa |
 
-**Notas:**
-- ⚠️ Redis y Cassandra NO implementados
-- ⚠️ Webhooks personalizados sin UI en frontend (solo API)
-- ✅ Pagos únicos, NO suscripciones recurrentes
-
 ---
 
-**¿Preguntas o problemas?** Consulta los logs o contacta al equipo de desarrollo.
+**Repositorio**: [GitHub - CrudCloudDb-Backend](https://github.com/andromeda-riwi/CrudCloudDb-Backend)
 
