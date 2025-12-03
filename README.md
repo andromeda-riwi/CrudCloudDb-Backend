@@ -1,440 +1,790 @@
-﻿# CrudCloudDb Platform ("CCD") - Backend
+﻿# 🚀 CrudCloudDb Platform - Backend API
 
-**Status**: ✅ **100% COMPLETADO Y LISTO PARA PRODUCCIÓN**
+![Status](https://img.shields.io/badge/status-production-success)
+![.NET](https://img.shields.io/badge/.NET-8.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
----
-
-## 📋 Descripción General
-
-Plataforma web tipo Clever Cloud para gestión automatizada de bases de datos en la nube. Los usuarios pueden crear, administrar y eliminar instancias de bases de datos (MySQL, PostgreSQL, MongoDB, SQL Server) de manera centralizada y segura.
-
-**Backend**: ASP.NET Core 8 Web API  
-**Autenticación**: JWT (24 horas)  
-**Base de Datos**: PostgreSQL (aplicación) + 4 motores adicionales  
-**Pagos**: Mercado Pago  
-**Email**: SendGrid  
+**Plataforma de gestión automatizada de bases de datos en la nube tipo Clever Cloud**
 
 ---
 
-## 🎯 Modelos de Planes
+## 📋 Tabla de Contenidos
 
-| Plan | Bases de Datos | Precio |
-|------|---|---|
-| Gratuito | 2 por motor | Gratis |
-| Intermedio | 5 por motor | $5.000 COP/mes |
-| Avanzado | 10 por motor | $10.000 COP/mes |
-
----
-
-## ✅ Endpoints Implementados (37 TOTAL)
-
-### Autenticación (6)
-- `POST /api/auth/register` - Registrar usuario
-- `POST /api/auth/login` - Iniciar sesión
-- `POST /api/auth/verify-email` - Verificar email
-- `POST /api/auth/resend-verification` - Reenviar verificación
-- `POST /api/auth/forgot-password` - Recuperar contraseña
-- `POST /api/auth/reset-password` - Restablecer contraseña
-
-### Usuarios (4)
-- `GET /api/users/me` - Datos del usuario
-- `GET /api/users/plan` - Info del plan
-- `POST /api/users/change-password` - Cambiar contraseña
-- `PUT /api/users/profile` - Actualizar perfil
-
-### Bases de Datos (7)
-- `GET /api/databases` - Listar BD
-- `POST /api/databases` - Crear BD
-- `GET /api/databases/{id}` - Obtener detalles
-- `GET /api/databases/{id}/credentials` - Ver credenciales (1ª vez)
-- `POST /api/databases/{id}/rotate-credentials` - Rotar credenciales
-- `DELETE /api/databases/{id}` - Eliminar BD
-- `GET /api/databases/stats` - Estadísticas del dashboard
-
-### Pagos (3)
-- `POST /api/payments/preference` - Crear preferencia Mercado Pago
-- `GET /api/payments/history` - Historial de pagos
-- `GET /api/payments/plans` - Listar planes
-
-### Webhooks (8)
-- `GET /api/webhooks` - Listar webhooks
-- `GET /api/webhooks/{id}` - Obtener webhook
-- `POST /api/webhooks` - Crear webhook
-- `PUT /api/webhooks/{id}` - Actualizar webhook
-- `PATCH /api/webhooks/{id}/toggle` - Activar/Desactivar
-- `DELETE /api/webhooks/{id}` - Eliminar webhook
-- `GET /api/webhooks/{id}/history` - Historial de eventos
-- `POST /api/webhooks/{id}/test` - Probar webhook
-
-### Auditoría (2) **✨ NUEVO**
-- `GET /api/audit` - Obtener logs del usuario actual
-- `GET /api/audit/all` - Obtener todos los logs (admin)
-
-### Error Reporting (2)
-- `POST /api/error-report` - Reportar error
-- `GET /api/error-report/history` - Historial de errores
-
-### Sistema (3)
-- `POST /api/webhook/mercadopago` - Webhook Mercado Pago
-- `GET /api/health` - Health check básico
-- `GET /api/health/detailed` - Health check detallado
+- [Descripción](#-descripción)
+- [Arquitectura](#-arquitectura)
+- [Tecnologías y Dependencias](#-tecnologías-y-dependencias)
+- [Características Implementadas](#-características-implementadas)
+- [Endpoints de la API](#-endpoints-de-la-api)
+- [Configuración](#️-configuración)
+- [Instalación y Despliegue](#-instalación-y-despliegue)
+- [Sistema de Planes](#-sistema-de-planes)
+- [Motores de Bases de Datos](#-motores-de-bases-de-datos)
+- [Integraciones](#-integraciones)
+- [Seguridad](#-seguridad)
+- [Estructura del Proyecto](#-estructura-del-proyecto)
 
 ---
 
-## 🚀 Inicio Rápido
+## 📖 Descripción
 
-### Prerrequisitos
-- .NET 8 SDK
-- PostgreSQL
-- Docker (opcional)
+**CrudCloudDb (CCD)** es una API REST construida con **ASP.NET Core 8** que permite a los usuarios gestionar instancias de bases de datos en la nube de manera automatizada. Los usuarios pueden crear, administrar y eliminar bases de datos de distintos motores (PostgreSQL, MySQL, MongoDB, SQL Server) mediante una interfaz programática segura y escalable.
 
-### Instalación
+### 🎯 Objetivo Principal
 
-1. **Clonar y navegar**
+Proporcionar un backend robusto para una plataforma de gestión de bases de datos que permita:
+- Registro y autenticación de usuarios con verificación de email
+- Creación automática de bases de datos con credenciales únicas
+- Gestión de planes (gratuito, intermedio, avanzado)
+- Integración con pasarela de pagos (Mercado Pago)
+- Sistema de webhooks personalizables
+- Auditoría completa de acciones
+- Notificaciones por email automatizadas
+
+### 🌐 Dominios
+
+- **Backend API**: `https://service.andromeda.andrescortes.dev`
+- **Frontend**: `https://andromeda.andrescortes.dev`
+- **Swagger UI**: `https://service.andromeda.andrescortes.dev/swagger`
+
+---
+
+## 🏗️ Arquitectura
+
+El proyecto sigue una **arquitectura en capas (Clean Architecture)** para mantener la separación de responsabilidades y facilitar el mantenimiento:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    CCD.Api (Presentación)               │
+│  Controllers, Middleware, DTOs, Program.cs              │
+└─────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────┐
+│              CCD.Core (Lógica de Negocio)               │
+│  Interfaces, Entidades, Reglas de negocio               │
+└─────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────┐
+│          CCD.Infrastructure (Datos y Servicios)         │
+│  Repositorios, DbContext, Servicios externos            │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Capas del Proyecto
+
+#### **1. CCD.Api (Capa de Presentación)**
+- **Propósito**: Exponer endpoints HTTP y manejar peticiones/respuestas
+- **Responsabilidades**:
+  - Controladores REST
+  - Configuración de JWT
+  - Middleware de excepciones global
+  - Validación de entrada
+  - Documentación con Swagger
+
+#### **2. CCD.Core (Capa de Dominio)**
+- **Propósito**: Contener la lógica de negocio pura
+- **Responsabilidades**:
+  - Entidades del dominio (User, DatabaseInstance, Webhook, etc.)
+  - Interfaces de servicios
+  - DTOs compartidos
+  - Reglas de negocio
+
+#### **3. CCD.Infrastructure (Capa de Infraestructura)**
+- **Propósito**: Implementar persistencia y servicios externos
+- **Responsabilidades**:
+  - Entity Framework Core y migraciones
+  - Implementación de repositorios
+  - Servicios de email (SendGrid)
+  - Servicios de pago (Mercado Pago)
+  - Provisión de bases de datos
+  - Sistema de webhooks
+
+---
+
+## 🛠️ Tecnologías y Dependencias
+
+### Stack Principal
+
+| Tecnología | Versión | Propósito |
+|------------|---------|-----------|
+| .NET | 8.0 | Framework principal |
+| ASP.NET Core | 8.0 | Web API |
+| Entity Framework Core | 8.0.4 | ORM para PostgreSQL |
+| PostgreSQL | 16+ | Base de datos principal |
+| Docker | Latest | Contenedores |
+
+### 📦 Dependencias Principales
+
+#### **CCD.Api**
+
+```xml
+<!-- Autenticación y Autorización -->
+<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />
+<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.0" />
+
+<!-- Documentación API -->
+<PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+
+<!-- Email -->
+<PackageReference Include="SendGrid" Version="9.29.3" />
+
+<!-- Utilidades -->
+<PackageReference Include="DotNetEnv" Version="3.1.1" />
+<PackageReference Include="TimeZoneConverter" Version="6.1.0" />
+<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+
+<!-- Entity Framework Design Tools -->
+<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4" />
+```
+
+**Explicación de dependencias CCD.Api:**
+
+- **`Microsoft.AspNetCore.Authentication.JwtBearer`**: Implementa autenticación mediante tokens JWT (JSON Web Tokens). Los usuarios reciben un token al iniciar sesión que debe incluirse en cada petición protegida.
+
+- **`Swashbuckle.AspNetCore`**: Genera automáticamente la documentación interactiva Swagger/OpenAPI para probar los endpoints de la API desde el navegador.
+
+- **`SendGrid`**: Cliente oficial de SendGrid para enviar correos electrónicos (verificación de cuenta, credenciales de BD, recuperación de contraseña).
+
+- **`DotNetEnv`**: Permite cargar variables de entorno desde archivos `.env` para configuración local y producción.
+
+- **`TimeZoneConverter`**: Maneja conversión de zonas horarias, útil para registros de auditoría y timestamps.
+
+- **`Newtonsoft.Json`**: Librería de serialización/deserialización JSON, usada para procesar respuestas de Mercado Pago y webhooks.
+
+#### **CCD.Infrastructure**
+
+```xml
+<!-- ORM y Base de Datos -->
+<PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.4" />
+<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
+<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.4" />
+<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4" />
+
+<!-- Drivers de Bases de Datos -->
+<PackageReference Include="MySql.Data" Version="8.4.0" />
+<PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.0" />
+<PackageReference Include="MongoDB.Driver" Version="2.28.0" />
+
+<!-- Integración de Pagos -->
+<PackageReference Include="mercadopago-sdk" Version="2.10.1" />
+
+<!-- Email -->
+<PackageReference Include="SendGrid" Version="9.29.3" />
+
+<!-- HTTP Client -->
+<PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
+
+<!-- Configuración -->
+<PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+<PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.0" />
+<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
+```
+
+**Explicación de dependencias CCD.Infrastructure:**
+
+- **`Microsoft.EntityFrameworkCore`**: ORM (Object-Relational Mapper) que permite trabajar con bases de datos usando objetos C# en lugar de SQL directo. Maneja migraciones, consultas LINQ y seguimiento de cambios.
+
+- **`Npgsql.EntityFrameworkCore.PostgreSQL`**: Proveedor de Entity Framework Core para PostgreSQL, la base de datos principal de la aplicación donde se almacenan usuarios, planes, instancias de BD, webhooks y auditoría.
+
+- **`MySql.Data`**: Driver oficial de MySQL para .NET. Permite ejecutar comandos SQL directos en servidores MySQL para crear bases de datos, usuarios y gestionar permisos.
+
+- **`Microsoft.Data.SqlClient`**: Cliente moderno de SQL Server para .NET. Ejecuta comandos T-SQL para provisionar bases de datos en SQL Server.
+
+- **`MongoDB.Driver`**: Driver oficial de MongoDB para .NET. Permite conectarse a servidores MongoDB y crear bases de datos usando comandos nativos de Mongo.
+
+- **`mercadopago-sdk`**: SDK oficial de Mercado Pago para integración de pagos. Permite crear preferencias de pago y procesar notificaciones IPN (Instant Payment Notification).
+
+- **`SendGrid`**: Cliente de SendGrid duplicado en Infrastructure para envío directo de emails desde servicios.
+
+- **`Microsoft.Extensions.Http`**: Proporciona `HttpClientFactory` para hacer peticiones HTTP a webhooks de usuarios y APIs externas de forma eficiente.
+
+### 🗄️ Bases de Datos Requeridas
+
+El sistema utiliza múltiples bases de datos:
+
+1. **PostgreSQL** (Principal)
+   - Base de datos de la aplicación (`ccd_dev_db`)
+   - Almacena: usuarios, planes, instancias de BD, webhooks, auditoría
+   - Puerto: `5432`
+
+2. **MySQL** (Provisión)
+   - Servidor para crear bases de datos de usuarios
+   - Puerto: `3306`
+
+3. **MongoDB** (Provisión)
+   - Servidor para crear bases de datos de usuarios
+   - Puerto: `27017`
+
+4. **SQL Server** (Provisión)
+   - Servidor para crear bases de datos de usuarios
+   - Puerto: `1433`
+
+---
+
+## ✨ Características Implementadas
+
+### ✅ Sistema de Autenticación Completo
+
+- **Registro de usuarios** con validación de datos
+- **Verificación de email** obligatoria con token temporal (24h)
+- **Login con JWT** (token válido por 24 horas)
+- **Recuperación de contraseña** con token temporal (1h)
+- **Cambio de contraseña** para usuarios autenticados
+- **Hash seguro de contraseñas** usando HMACSHA512 con salt único por usuario
+
+### ✅ Gestión de Bases de Datos
+
+- **Creación automática** de bases de datos en 4 motores
+- **Generación de credenciales únicas** (usuario, contraseña, puerto, host)
+- **Aislamiento completo** entre bases de datos de diferentes usuarios
+- **Validación de cuotas** según plan del usuario
+- **Eliminación segura** con limpieza completa (base de datos + usuario)
+- **Visualización de credenciales** solo la primera vez (por seguridad)
+- **Notificación por email** con credenciales al crear BD
+
+### ✅ Sistema de Planes
+
+| Plan | Bases de Datos | Precio | Estado |
+|------|----------------|--------|--------|
+| **Gratuito** | 2 por motor | Gratis | Asignado automáticamente al registrarse |
+| **Intermedio** | 5 por motor | $5,000 COP | Pago único mediante Mercado Pago |
+| **Avanzado** | 10 por motor | $10,000 COP | Pago único mediante Mercado Pago |
+
+### ✅ Integración con Mercado Pago
+
+- **Creación de preferencias** de pago para planes
+- **Webhook IPN** para recibir notificaciones de pago
+- **Actualización automática** del plan tras confirmación
+- **Registro de transacciones** en historial de pagos
+
+### ✅ Sistema de Webhooks Personalizados
+
+Los usuarios pueden configurar **webhooks personalizados** para recibir notificaciones en tiempo real de eventos:
+
+**Eventos disponibles:**
+- `account.created` - Usuario registrado
+- `database.created` - Base de datos creada
+- `database.deleted` - Base de datos eliminada
+- `plan.changed` - Plan actualizado
+- `payment.confirmed` - Pago confirmado
+
+**Características:**
+- ✅ Firma HMAC-SHA256 para seguridad
+- ✅ Reintentos automáticos (4 intentos)
+- ✅ Historial completo de envíos
+- ✅ Activar/desactivar individualmente
+- ✅ Probar webhook manualmente
+- ✅ Gestión mediante Swagger UI o Postman
+
+### ✅ Sistema de Emails Automatizados
+
+Correos enviados automáticamente usando **SendGrid**:
+
+1. **Verificación de cuenta** - Al registrarse (token válido 24h)
+2. **Credenciales de BD** - Al crear una base de datos
+3. **Confirmación de eliminación** - Al eliminar una BD
+4. **Confirmación de pago** - Tras pago exitoso
+5. **Recuperación de contraseña** - Token válido 1h
+6. **Cambio de plan** - Al actualizar plan
+
+### ✅ Sistema de Auditoría
+
+Registro completo de acciones importantes:
+
+- ✅ Registro de usuarios
+- ✅ Inicios de sesión
+- ✅ Creación de bases de datos
+- ✅ Eliminación de bases de datos
+- ✅ Cambios de plan
+- ✅ Almacenamiento de IP y timestamp
+- ✅ Consulta de historial por usuario
+
+### ✅ Error Reporting
+
+- ✅ Middleware global de excepciones
+- ✅ Captura automática de errores
+- ✅ Logs detallados en consola
+- ✅ Endpoint para reportar errores manualmente
+
+---
+
+## 🔌 Endpoints de la API
+
+Total: **31 endpoints**
+
+### 🔐 Autenticación (6 endpoints)
+
+```http
+POST   /api/auth/register              # Registrar nuevo usuario
+POST   /api/auth/login                 # Iniciar sesión (devuelve JWT)
+POST   /api/auth/verify-email          # Verificar email con token
+POST   /api/auth/resend-verification   # Reenviar email de verificación
+POST   /api/auth/forgot-password       # Solicitar recuperación de contraseña
+POST   /api/auth/reset-password        # Restablecer contraseña con token
+```
+
+**Ejemplo de registro:**
+```json
+POST /api/auth/register
+{
+  "name": "Juan",
+  "lastName": "Pérez",
+  "userName": "juanperez",
+  "email": "juan@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Respuesta:**
+```json
+{
+  "message": "Usuario registrado exitosamente. Por favor verifica tu correo electrónico.",
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+```
+
+### 👤 Usuarios (4 endpoints)
+
+```http
+GET    /api/users/me                   # Obtener datos del usuario actual
+GET    /api/users/plan                 # Obtener información del plan actual
+POST   /api/users/change-password      # Cambiar contraseña
+PUT    /api/users/profile              # Actualizar perfil (nombre, apellido)
+```
+
+### 🗄️ Bases de Datos (6 endpoints)
+
+```http
+GET    /api/databases                  # Listar todas las BD del usuario
+POST   /api/databases                  # Crear nueva base de datos
+GET    /api/databases/{id}             # Obtener detalles de una BD
+GET    /api/databases/{id}/credentials # Ver credenciales (solo 1ª vez)
+DELETE /api/databases/{id}             # Eliminar base de datos
+GET    /api/databases/stats            # Estadísticas del dashboard
+```
+
+**Ejemplo de creación de BD:**
+```json
+POST /api/databases
+Authorization: Bearer {jwt_token}
+{
+  "engine": "PostgreSQL",
+  "timeZoneId": "America/Bogota"
+}
+```
+
+**Respuesta:**
+```json
+{
+  "id": "db-guid-123",
+  "name": "user_02122f9a_b8b3",
+  "engine": "PostgreSQL",
+  "status": "Active",
+  "createdAt": "2025-11-20T10:30:00Z",
+  "connectionDetails": {
+    "host": "49.12.100.202",
+    "port": 5432,
+    "databaseName": "user_02122f9a_b8b3",
+    "username": "user_affde09948be",
+    "password": "********",
+    "connectionString": "Server=49.12.100.202;Port=5432;Database=user_02122f9a_b8b3;..."
+  },
+  "credentialsViewedAt": null
+}
+```
+
+### 💳 Pagos (3 endpoints)
+
+```http
+POST   /api/payments/preference        # Crear preferencia de pago en Mercado Pago
+GET    /api/payments/history           # Historial de pagos del usuario
+GET    /api/payments/plans             # Listar planes disponibles
+```
+
+### 🔔 Webhooks (8 endpoints)
+
+```http
+GET    /api/webhooks                   # Listar webhooks del usuario
+GET    /api/webhooks/{id}              # Obtener webhook específico
+POST   /api/webhooks                   # Crear nuevo webhook
+PUT    /api/webhooks/{id}              # Actualizar webhook
+PATCH  /api/webhooks/{id}/toggle       # Activar/desactivar webhook
+DELETE /api/webhooks/{id}              # Eliminar webhook
+GET    /api/webhooks/{id}/history      # Historial de eventos del webhook
+POST   /api/webhooks/{id}/test         # Probar webhook manualmente
+```
+
+
+### 📊 Auditoría (2 endpoints)
+
+```http
+GET    /api/audit                      # Logs del usuario actual
+GET    /api/audit/all                  # Todos los logs (requiere permisos admin)
+```
+
+### ⚙️ Sistema (2 endpoints)
+
+```http
+POST   /api/webhook/mercadopago        # Webhook IPN de Mercado Pago
+POST   /api/error-report               # Reportar errores de producción
+```
+
+---
+
+## ⚙️ Configuración
+
+### Variables de Entorno
+
+Crear archivo `.env` en la raíz del proyecto:
+
+```bash
+# Entorno
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_URLS=https://+:443
+
+# JWT
+JWT_SECRET_TOKEN=tu-secreto-jwt-super-seguro-minimo-32-caracteres
+
+# Mercado Pago
+MERCADOPAGO_ACCESS_TOKEN=APP_USR-1234567890123456-123456-xxxxxxxxxxxxxxxxxxxxxxxx-123456789
+MERCADOPAGO_WEBHOOK_SECRET=tu-secreto-webhook-mercadopago
+
+# SendGrid
+SENDGRID_API_KEY=SG.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SENDGRID_FROM_EMAIL=noreply@tudominio.com
+SENDGRID_FROM_NAME=Tu Plataforma
+
+# Dashboard URL
+APP_DASHBOARD_URL=https://tudominio.com/dashboard
+
+# Base de datos principal (PostgreSQL - Aplicación)
+DEFAULT_CONNECTION=Server=localhost;Port=5432;Database=ccd_dev_db;User Id=root;Password=tu_password
+
+# Conexiones para provisión de BD
+ADMIN_POSTGRES_CONNECTION=Host=localhost;Port=5432;Database=postgres;Username=root;Password=tu_password
+ADMIN_MYSQL_CONNECTION=Server=localhost;Port=3306;Database=mysql;User Id=root;Password=tu_password
+ADMIN_SQLSERVER_CONNECTION=Server=localhost,1433;Database=master;User Id=sa;Password=tu_password;TrustServerCertificate=True
+ADMIN_MONGO_CONNECTION=mongodb://root:tu_password@localhost:27017
+```
+
+### Configuración de appsettings.json
+
+El archivo `appsettings.json` se gestiona automáticamente con las variables de entorno. Estructura básica:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "Jwt": {
+    "Key": "${JWT_SECRET_TOKEN}",
+    "Issuer": "CCD.Api",
+    "Audience": "CCD.Client",
+    "ExpirationHours": 24
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "${DEFAULT_CONNECTION}"
+  }
+}
+```
+
+---
+
+## 🚀 Instalación y Despliegue
+
+### Requisitos Previos
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [Docker](https://www.docker.com/) (opcional, recomendado)
+- [PostgreSQL 16+](https://www.postgresql.org/download/)
+- Servidores de BD: MySQL, MongoDB, SQL Server
+
+### Instalación Local
+
+#### 1. Clonar el repositorio
+
 ```bash
 git clone https://github.com/tu-usuario/CrudCloudDb-Backend.git
 cd CrudCloudDb-Backend
 ```
 
-2. **Configurar variables de entorno**
+#### 2. Restaurar dependencias
+
+```bash
+dotnet restore
+```
+
+#### 3. Configurar variables de entorno
+
 ```bash
 cp .env.example .env
 # Editar .env con tus credenciales
 ```
 
-3. **Iniciar base de datos**
+#### 4. Ejecutar migraciones
+
+```bash
+# Asegurarse de que PostgreSQL esté corriendo
+dotnet ef database update --project src/CCD.Infrastructure --startup-project src/CCD.Api
+```
+
+#### 5. Ejecutar la aplicación
+
+```bash
+cd src/CCD.Api
+dotnet run
+```
+
+La API estará disponible en:
+- `http://localhost:5000` (HTTP)
+- `https://localhost:5001` (HTTPS)
+- `http://localhost:5000/swagger` (Documentación)
+
+### Despliegue con Docker
+
+#### 1. Construir imagen
+
+```bash
+docker build -t ccd-backend:latest -f src/CCD.Api/Dockerfile .
+```
+
+#### 2. Ejecutar contenedor
+
+```bash
+docker run -d \
+  --name ccd_api \
+  -p 8080:8080 \
+  --env-file .env \
+  ccd-backend:latest
+```
+
+#### 3. Con Docker Compose (recomendado)
+
 ```bash
 docker-compose up -d
 ```
 
-4. **Ejecutar migraciones**
+El archivo `docker-compose.yml` incluye:
+- Backend API
+- PostgreSQL
+- MySQL
+- MongoDB
+- SQL Server (opcional)
+
+### Verificar Despliegue
+
 ```bash
-dotnet ef database update --project src/CCD.Infrastructure
-```
+# Health check
+curl http://localhost:8080/api/health
 
-5. **Ejecutar aplicación**
-```bash
-dotnet run --project src/CCD.Api
-```
-
-La API estará disponible en `http://localhost:5063`  
-Swagger UI: `http://localhost:5063/swagger`
-
----
-
-## 🔧 Variables de Entorno Requeridas
-
-```
-ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=https://+:443
-
-JWT_SECRET_TOKEN=your-secret-key-here
-
-MERCADOPAGO_ACCESS_TOKEN=your-mp-token
-MERCADOPAGO_WEBHOOK_SECRET=your-mp-webhook-secret
-
-SENDGRID_API_KEY=your-sendgrid-key
-SENDGRID_FROM_EMAIL=noreply@apexdb.com
-SENDGRID_FROM_NAME=ApexDB
-
-APP_DASHBOARD_URL=https://andromeda.andrescortes.dev/dashboard
-
-DEFAULT_CONNECTION=Server=localhost;Port=5432;Database=ccd_app;Username=postgres;Password=password
-ADMIN_POSTGRES_CONNECTION=Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=password
-ADMIN_MYSQL_CONNECTION=Server=localhost;Port=3306;Database=mysql;User Id=root;Password=password
-ADMIN_SQLSERVER_CONNECTION=Server=localhost,1433;Database=master;User Id=sa;Password=password;TrustServerCertificate=True
+# Swagger
+curl http://localhost:8080/swagger
 ```
 
 ---
 
-## 🏗️ Arquitectura en Capas
+## 💰 Sistema de Planes
 
-```
-CCD.Api (Presentación)
-├── Controllers (8)
-│   ├── AuthController
-│   ├── UsersController
-│   ├── DatabasesController
-│   ├── PaymentsController
-│   ├── WebhooksController
-│   ├── WebhookController (MP)
-│   ├── AuditController ✨ NUEVO
-│   └── ErrorReportController
-├── Dtos (20+)
-├── Middleware
-│   └── GlobalExceptionMiddleware
-└── Program.cs
+### Plan Gratuito (Default)
 
-CCD.Core (Lógica de Negocio)
-├── Interfaces
-│   ├── IAuthRepository
-│   ├── IDatabaseProvisioner
-│   ├── IEmailService
-│   ├── IWebhookService
-│   ├── IAuditService ✨ NUEVO
-│   └── IPaymentService
-├── Entities
-│   ├── User
-│   ├── Plan
-│   ├── DatabaseInstance
-│   ├── Webhook
-│   ├── WebhookEvent
-│   └── AuditLog ✨ NUEVO
-└── Dtos
+- ✅ Asignado automáticamente al registrarse
+- ✅ **2 bases de datos por motor** (total: 8 BD)
+- ✅ Acceso a todos los endpoints
+- ✅ Emails de notificación
+- ✅ Webhooks personalizados (sin límite)
 
-CCD.Infrastructure (Datos)
-├── Services (6)
-│   ├── AuthRepository
-│   ├── DatabaseProvisioner
-│   ├── SendGridEmailService
-│   ├── WebhookService
-│   ├── AuditService ✨ NUEVO
-│   └── PaymentService
-├── Data (EF Core)
-│   └── ApplicationDbContext
-└── Migrations (15+)
-```
+### Plan Intermedio ($5,000 COP)
 
----
+- ✅ **5 bases de datos por motor** (total: 20 BD)
+- ✅ Todas las características del plan gratuito
+- ✅ Soporte prioritario
 
-## 🔐 Seguridad
+### Plan Avanzado ($10,000 COP)
 
-✅ JWT Authentication (24 horas)  
-✅ Password Hashing (HMACSHA512 + salt)  
-✅ Email Verification obligatoria  
-✅ CORS configurado para dominios específicos  
-✅ Global Exception Handler  
-✅ HTTPS obligatorio  
-✅ Validación de cuotas por plan  
-✅ Control de acceso por usuario  
-✅ **Sistema de Auditoría completo** ✨ NUEVO  
-✅ **Validaciones robustas con Regex** ✨ NUEVO  
-✅ **Prevención de SQL Injection**  
+- ✅ **10 bases de datos por motor** (total: 40 BD)
+- ✅ Todas las características del plan intermedio
+- ✅ Soporte dedicado
 
----
+### Validación de Cuotas
 
-## ✨ Características Nuevas
+El sistema valida automáticamente:
+1. Número de bases de datos actuales del usuario por motor
+2. Límite del plan actual
+3. Bloquea creación si se alcanza el límite
+4. Actualiza cuotas al cambiar de plan
 
-### Sistema de Auditoría
-- ✅ Registro de todas las acciones importantes
-- ✅ Logs persistentes en PostgreSQL
-- ✅ Consulta de historial por usuario
-- ✅ IP tracking
-- ✅ Eventos auditados:
-  - `user.registered` - Registro de usuario
-  - `user.login` - Inicio de sesión
-  - `database.created` - Creación de BD
-  - `database.deleted` - Eliminación de BD
-  - `plan.changed` - Cambio de plan
-
-### Validaciones Robustas
-- ✅ Contraseñas fuertes (mínimo 8 caracteres, mayúsculas, minúsculas, números, símbolos)
-- ✅ Validación de emails con formato correcto
-- ✅ Nombres solo con letras y espacios
-- ✅ Motores de BD validados contra lista blanca
-- ✅ Prevención de SQL Injection en nombres de BD  
-
----
-
-## 📊 Bases de Datos Soportadas
-
-| Motor | Status |
-|-------|--------|
-| PostgreSQL | ✅ Completo |
-| MySQL | ✅ Completo |
-| SQL Server | ✅ Completo |
-| MongoDB | ✅ Completo |
-
----
-
-## 🔗 Integraciones Externas
-
-### Mercado Pago
-- Crear preferencias de pago
-- Recibir notificaciones IPN
-- Actualización automática de planes
-- Gestión de suscripciones
-
-### SendGrid
-- Emails de verificación
-- Credenciales de BD
-- Notificaciones de pago
-- Recuperación de contraseña
-
----
-
-## 📧 Sistema de Correos (SendGrid)
-
-### Configuración
-
-El sistema de correos está completamente operativo usando SendGrid como proveedor SMTP.
-
-**Variables de entorno requeridas:**
-```env
-SENDGRID_API_KEY=SG.xxxxxxxxxxxxxxxxxxxx
-SENDGRID_FROM_EMAIL=noreply@andromeda.andrescortes.dev
-SENDGRID_FROM_NAME=Andromeda Platform
-```
-
-### Tipos de Correos Enviados
-
-#### 1. **Verificación de Cuenta** 📨
-- **Disparador**: Al registrar un usuario
-- **Contenido**: Token de verificación con enlace
-- **Plantilla**: HTML con diseño responsive
-- **Validez**: Token expira en 24 horas
-
-**Ejemplo de uso:**
-```csharp
-await _emailService.SendVerificationEmailAsync(
-    email: "user@example.com",
-    userName: "John Doe",
-    verificationToken: "abc123xyz789"
-);
-```
-
-#### 2. **Credenciales de Base de Datos** 🔐
-- **Disparador**: Al crear una nueva BD o rotar credenciales
-- **Contenido**: 
-  - Host y puerto
-  - Nombre de la base de datos
-  - Usuario y contraseña
-  - String de conexión completo
-- **Seguridad**: Contraseñas enviadas solo una vez
-
-**Ejemplo:**
-```csharp
-await _emailService.SendDatabaseCredentialsAsync(
-    email: "user@example.com",
-    userName: "John Doe",
-    credentials: new DatabaseConnectionDetails {
-        Host = "postgres.andromeda.dev",
-        Port = 5432,
-        DatabaseName = "user_db_123",
-        Username = "db_user_123",
-        Password = "SecurePass123!"
-    }
-);
-```
-
-#### 3. **Eliminación de Base de Datos** 🗑️
-- **Disparador**: Al eliminar una BD
-- **Contenido**: Confirmación de eliminación con detalles
-- **Propósito**: Auditoría y confirmación
-
-#### 4. **Confirmación de Pago** 💳
-- **Disparador**: Tras confirmación de pago en Mercado Pago
-- **Contenido**:
-  - Monto pagado
-  - Plan adquirido
-  - Fecha de inicio y fin
-  - Recibo de transacción
-
-#### 5. **Recuperación de Contraseña** 🔑
-- **Disparador**: Solicitud de reset de contraseña
-- **Contenido**: Token de reseteo con enlace
-- **Validez**: Token expira en 1 hora
-
-### Implementación
-
-**Servicio**: `SendGridEmailService.cs`  
-**Interfaz**: `IEmailService.cs`  
-**Ubicación**: `CCD.Infrastructure/Services/`
-
-**Métodos disponibles:**
-```csharp
-Task SendVerificationEmailAsync(string email, string userName, string verificationToken);
-Task SendDatabaseCredentialsAsync(string email, string userName, DatabaseConnectionDetails credentials);
-Task SendDatabaseDeletionEmailAsync(string email, string userName, string databaseName, string engine);
-Task SendPaymentConfirmationEmailAsync(string email, string userName, PaymentDetails payment);
-Task SendPasswordResetEmailAsync(string email, string userName, string resetToken);
-```
-
-### Plantillas de Email
-
-Las plantillas están en formato HTML responsive con:
-- ✅ Logo de la plataforma
-- ✅ Diseño limpio y profesional
-- ✅ Botones de acción destacados
-- ✅ Footer con información de contacto
-- ✅ Compatible con clientes de email móviles
-
-### Monitoreo
-
-El sistema registra automáticamente:
-- ✅ Emails enviados exitosamente
-- ✅ Errores al enviar
-- ❌ Fallos de conexión con SendGrid
-- 📊 Logs en consola y sistema de auditoría
-
----
-
-## 🔔 Sistema de Webhooks
-
-### 1. Webhooks Personalizados del Usuario
-
-Los usuarios pueden configurar sus propios webhooks para recibir notificaciones de eventos en tiempo real.
-
-#### Configuración
-
-**Endpoints disponibles:**
-- `POST /api/webhooks` - Crear webhook
-- `GET /api/webhooks` - Listar webhooks del usuario
-- `GET /api/webhooks/{id}` - Obtener detalles
-- `PUT /api/webhooks/{id}` - Actualizar webhook
-- `PATCH /api/webhooks/{id}/toggle` - Activar/desactivar
-- `DELETE /api/webhooks/{id}` - Eliminar webhook
-- `POST /api/webhooks/{id}/test` - Probar webhook
-- `GET /api/webhooks/{id}/history` - Ver historial de envíos
-
-#### Crear un Webhook
-
-**Request:**
-```http
-POST /api/webhooks
-Authorization: Bearer {jwt_token}
-Content-Type: application/json
-
-{
-  "url": "https://mi-servidor.com/webhook",
-  "secret": "mi_secreto_seguro_123",
-  "events": ["account.created", "database.created", "database.deleted"],
-  "isActive": true
-}
-```
-
-**Response:**
+**Ejemplo de error al exceder cuota:**
 ```json
 {
-  "id": "guid-webhook-id",
-  "url": "https://mi-servidor.com/webhook",
-  "events": ["account.created", "database.created", "database.deleted"],
-  "isActive": true,
-  "createdAt": "2025-11-18T12:00:00Z"
+  "error": "Has alcanzado el límite de bases de datos PostgreSQL para tu plan. Actualiza tu plan para crear más.",
+  "currentCount": 2,
+  "limit": 2,
+  "planName": "Gratuito"
 }
 ```
 
-#### Eventos Disponibles
+---
 
-| Evento | Descripción | Payload |
-|--------|-------------|---------|
-| `account.created` | Usuario registrado | `{ userId, email, userName, timestamp }` |
-| `database.created` | Base de datos creada | `{ databaseId, name, engine, userId, timestamp }` |
-| `database.deleted` | Base de datos eliminada | `{ databaseId, name, engine, userId, timestamp }` |
-| `plan.changed` | Plan actualizado | `{ userId, oldPlan, newPlan, timestamp }` |
-| `payment.confirmed` | Pago confirmado | `{ paymentId, amount, plan, timestamp }` |
+## 🗄️ Motores de Bases de Datos
 
-#### Seguridad de Webhooks
+### Soportados ✅
 
-**Verificación de firma HMAC-SHA256:**
+#### 1. PostgreSQL
 
-Cada webhook enviado incluye un header `X-Webhook-Signature` con formato:
+**Características:**
+- Puerto: `5432`
+- Versión mínima: `12+`
+- Encoding: `UTF8`
+- Locale: `en_US.utf8`
+
+**Proceso de creación:**
+1. Generar nombre único: `user_{userId}_{random}`
+2. Generar usuario único: `user_{random}`
+3. Crear base de datos con `CREATE DATABASE`
+4. Crear usuario con contraseña segura
+5. Asignar privilegios completos al usuario
+6. Revocar acceso público
+
+#### 2. MySQL
+
+**Características:**
+- Puerto: `3306`
+- Versión mínima: `8.0+`
+- Charset: `utf8mb4`
+- Collation: `utf8mb4_unicode_ci`
+
+**Proceso de creación:**
+1. Generar nombre único
+2. Crear base de datos: `CREATE DATABASE`
+3. Crear usuario: `CREATE USER`
+4. Otorgar permisos: `GRANT ALL PRIVILEGES ON db.* TO user`
+5. Aplicar cambios: `FLUSH PRIVILEGES`
+
+#### 3. MongoDB
+
+**Características:**
+- Puerto: `27017`
+- Versión mínima: `6.0+`
+- Autenticación: SCRAM-SHA-256
+
+**Proceso de creación:**
+1. Generar nombre único
+2. Crear base de datos (se crea al insertar primer documento)
+3. Crear usuario con rol `dbOwner`
+4. Asignar permisos de lectura/escritura
+
+#### 4. SQL Server
+
+**Características:**
+- Puerto: `1433`
+- Versión: `2022+`
+- Autenticación: SQL Server Authentication
+- Collation: `SQL_Latin1_General_CP1_CI_AS`
+
+**Proceso de creación:**
+1. Generar nombre único
+2. Crear base de datos: `CREATE DATABASE`
+3. Crear login: `CREATE LOGIN`
+4. Crear usuario vinculado al login
+5. Asignar rol `db_owner`
+
+
+---
+
+## 🔗 Integraciones
+
+### 1. Mercado Pago
+
+**SDK**: `mercadopago-sdk` v2.10.1
+
+**Funcionalidades:**
+- ✅ Crear preferencias de pago
+- ✅ Webhook IPN para notificaciones
+- ✅ Validación de pagos
+- ✅ Actualización automática de planes
+
+**Configuración:**
+```bash
+MERCADOPAGO_ACCESS_TOKEN=APP_USR-xxxxx
+MERCADOPAGO_WEBHOOK_SECRET=xxxxx
 ```
-X-Webhook-Signature: t=1234567890,v1=hash_hmac_sha256
+
+**Webhook URL en Mercado Pago:**
+```
+https://service.andromeda.andrescortes.dev/api/webhook/mercadopago
 ```
 
-**Validar en tu servidor:**
+**Eventos soportados:**
+- `payment` - Notificación de pago
+
+**Flujo de pago:**
+1. Usuario solicita cambio de plan
+2. Backend crea preferencia en Mercado Pago
+3. Usuario completa pago
+4. Mercado Pago envía IPN al webhook
+5. Backend valida y actualiza plan
+6. Usuario recibe email de confirmación
+
+### 2. SendGrid
+
+**SDK**: `SendGrid` v9.29.3
+
+**Funcionalidades:**
+- ✅ Envío de emails transaccionales
+- ✅ Plantillas HTML responsivas
+- ✅ Tracking de envíos
+
+**Configuración:**
+```bash
+SENDGRID_API_KEY=SG.xxxxx
+SENDGRID_FROM_EMAIL=noreply@tudominio.com
+SENDGRID_FROM_NAME=Tu Plataforma
+```
+
+**Tipos de correos:**
+1. Verificación de cuenta (con token)
+2. Credenciales de BD
+3. Recuperación de contraseña
+4. Confirmación de pago
+5. Eliminación de BD
+6. Cambio de plan
+
+### 3. Webhooks Personalizados
+
+**Características:**
+- ✅ HTTP/HTTPS
+- ✅ Firma HMAC-SHA256
+- ✅ Reintentos automáticos (4 intentos)
+- ✅ Historial completo
+- ✅ Logs detallados
+
+**Eventos:**
+- `account.created`
+- `database.created`
+- `database.deleted`
+- `plan.changed`
+- `payment.confirmed`
+
+**Ejemplo de payload:**
+```json
+{
+  "eventType": "database.created",
+  "timestamp": "2025-11-20T10:30:00Z",
+  "data": {
+    "databaseId": "db-guid-123",
+    "name": "user_db_postgres_123",
+    "engine": "PostgreSQL",
+    "userId": "user-guid-456"
+  }
+}
+```
+
+**Verificación de firma:**
 ```javascript
+// Header: X-Webhook-Signature: t=1234567890,v1=hash
 const crypto = require('crypto');
 
 function verifyWebhook(payload, signature, secret) {
@@ -452,359 +802,448 @@ function verifyWebhook(payload, signature, secret) {
 }
 ```
 
-#### Ejemplo de Payload Recibido
+---
 
-**Evento: `database.created`**
+## 🔒 Seguridad
+
+### Implementaciones de Seguridad
+
+#### 1. Autenticación JWT
+
+- ✅ Token firmado con HMACSHA256
+- ✅ Expiración configurable (24 horas)
+- ✅ Claims personalizados (UserId, Email, PlanId)
+- ✅ Validación en cada request protegido
+
+**Estructura del token:**
 ```json
 {
-  "eventType": "database.created",
-  "timestamp": "2025-11-18T12:30:00Z",
-  "data": {
-    "databaseId": "guid-database-id",
-    "name": "user_db_postgres_123",
-    "engine": "PostgreSQL",
-    "userId": "guid-user-id",
-    "connectionDetails": {
-      "host": "postgres.andromeda.andrescortes.dev",
-      "port": 5432,
-      "databaseName": "user_db_postgres_123"
-    }
-  }
+  "userId": "guid",
+  "email": "user@example.com",
+  "planId": "1",
+  "exp": 1700500000,
+  "iss": "CCD.Api",
+  "aud": "CCD.Client"
 }
 ```
 
-#### Reintentos Automáticos
+#### 2. Hash de Contraseñas
 
-El sistema intenta reenviar webhooks fallidos:
-- ✅ 1er intento: Inmediato
-- ✅ 2do intento: Después de 30 segundos
-- ✅ 3er intento: Después de 5 minutos
-- ✅ 4to intento: Después de 30 minutos
-- ❌ Después de 4 intentos, se marca como fallido
+- ✅ Algoritmo: HMACSHA512
+- ✅ Salt único por usuario (128 bytes)
+- ✅ Hash de 64 bytes
+- ✅ Nunca se almacena la contraseña en texto plano
 
-#### Historial de Webhooks
-
-Consulta el historial de envíos:
-```http
-GET /api/webhooks/{webhookId}/history
-Authorization: Bearer {jwt_token}
-```
-
-**Response:**
-```json
+**Implementación:**
+```csharp
+using (var hmac = new HMACSHA512(passwordSalt))
 {
-  "events": [
-    {
-      "id": "event-guid",
-      "eventType": "database.created",
-      "status": "delivered",
-      "statusCode": 200,
-      "attempts": 1,
-      "timestamp": "2025-11-18T12:30:00Z",
-      "response": "OK"
-    },
-    {
-      "id": "event-guid-2",
-      "eventType": "database.deleted",
-      "status": "failed",
-      "statusCode": 500,
-      "attempts": 4,
-      "timestamp": "2025-11-18T13:00:00Z",
-      "error": "Connection timeout"
-    }
-  ]
+    passwordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
 }
 ```
 
-### 2. Webhook de Mercado Pago
+#### 3. Validaciones
 
-**Endpoint interno:** `POST /api/webhook/mercadopago`
+**Contraseñas:**
+- Mínimo 8 caracteres
+- Al menos 1 mayúscula
+- Al menos 1 minúscula
+- Al menos 1 número
+- Al menos 1 símbolo especial
 
-Recibe notificaciones IPN de Mercado Pago para:
-- ✅ Confirmar pagos
-- ✅ Actualizar planes automáticamente
-- ✅ Registrar transacciones
+**Emails:**
+- Formato válido con Regex
+- Verificación obligatoria
+- Token de verificación único
 
-**Configurado en Mercado Pago:**
-```
-URL: https://service.andromeda.andrescortes.dev/api/webhook/mercadopago
-Events: payment
-```
+**Nombres de BD:**
+- Solo letras, números y guiones bajos
+- Prevención de SQL Injection
+- Validación contra lista blanca de motores
 
-### 3. Webhooks de Errores (Error Reporting)
+#### 4. CORS
 
-**Endpoint:** `POST /api/error-report`
-
-El sistema automáticamente envía errores de producción a un webhook configurado.
-
-**Payload de error:**
-```json
+Configurado para dominios específicos:
+```csharp
+builder.Services.AddCors(options =>
 {
-  "eventType": "error.occurred",
-  "timestamp": "2025-11-18T12:00:00Z",
-  "error": {
-    "exception": "NullReferenceException",
-    "message": "Object reference not set to an instance of an object",
-    "stackTrace": "...",
-    "endpoint": "/api/databases",
-    "method": "POST",
-    "userId": "guid-user-id",
-    "traceId": "trace-id-123"
-  }
-}
+    options.AddPolicy("AllowFrontend",
+        builder => builder
+            .WithOrigins("https://andromeda.andrescortes.dev")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials());
+});
 ```
 
-### Monitoreo de Webhooks
+#### 5. Middleware de Excepciones
 
-El sistema proporciona métricas de webhooks:
-- 📊 Total de webhooks activos
-- 📊 Eventos enviados (exitosos/fallidos)
-- 📊 Tasa de éxito por webhook
-- 📊 Tiempo promedio de respuesta
+Captura global de errores:
+- ✅ Oculta detalles técnicos al cliente
+- ✅ Registra errores completos en logs
+- ✅ Retorna mensajes amigables
+- ✅ Incluye TraceId para debugging
 
-### 🖥️ Ver Webhooks en Consola
+#### 6. HTTPS
 
-#### **1. Interfaz Swagger (Recomendado)**
+- ✅ Obligatorio en producción
+- ✅ Redirección automática HTTP → HTTPS
+- ✅ HSTS habilitado
 
-**URL**: `http://localhost:5063/swagger`
+---
 
-En Swagger puedes:
-- ✅ Listar todos tus webhooks: `GET /api/webhooks`
-- ✅ Ver detalles de un webhook específico: `GET /api/webhooks/{id}`
-- ✅ Crear nuevos webhooks: `POST /api/webhooks`
-- ✅ Editar webhooks: `PUT /api/webhooks/{id}`
-- ✅ Activar/desactivar: `PATCH /api/webhooks/{id}/toggle`
-- ✅ Ver historial de eventos: `GET /api/webhooks/{id}/history`
-- ✅ Probar webhook: `POST /api/webhooks/{id}/test`
-
-**Pasos:**
-1. Abre `http://localhost:5063/swagger` en tu navegador
-2. Expande la sección **Webhooks** (verde)
-3. Haz clic en cualquier endpoint
-4. Presiona **Try it out**
-5. Completa los campos y presiona **Execute**
-
-#### **2. Logs en la Terminal/Consola**
-
-Cuando ejecutas `dotnet run`, verás en consola:
+## 📁 Estructura del Proyecto
 
 ```
-[12:30:45] info: CCD.Infrastructure.Services.WebhookService
-            Webhook enviado exitosamente
-            WebhookId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-            EventType: database.created
-            Attempts: 1
-            StatusCode: 200
-
-[12:30:50] warn: CCD.Infrastructure.Services.WebhookService
-            Reintentando webhook fallido
-            WebhookId: 7a92b5e9-1234-4567-b9ef-3d4f7g8h9i0j
-            EventType: database.deleted
-            Attempt: 2/4
-            NextRetry: 30 seconds
-
-[12:30:55] error: CCD.Infrastructure.Services.WebhookService
-            Webhook no entregado después de 4 intentos
-            WebhookId: 7a92b5e9-1234-4567-b9ef-3d4f7g8h9i0j
-            FinalStatus: Failed
-            Error: Connection timeout
+CrudCloudDb-Backend/
+├── src/
+│   ├── CCD.Api/                      # Capa de Presentación
+│   │   ├── Controllers/              # Controladores REST (8)
+│   │   │   ├── AuthController.cs           # Autenticación
+│   │   │   ├── UsersController.cs          # Gestión de usuarios
+│   │   │   ├── DatabasesController.cs      # CRUD de bases de datos
+│   │   │   ├── PaymentsController.cs       # Pagos y planes
+│   │   │   ├── WebhooksController.cs       # Webhooks personalizados
+│   │   │   ├── WebhookController.cs        # Webhook Mercado Pago
+│   │   │   ├── AuditController.cs          # Auditoría
+│   │   │   └── ErrorReportController.cs    # Error reporting
+│   │   ├── Dtos/                     # Data Transfer Objects (13)
+│   │   │   ├── UserRegisterDto.cs
+│   │   │   ├── UserLoginDto.cs
+│   │   │   ├── DatabaseCreateDto.cs
+│   │   │   ├── DatabaseResponseDto.cs
+│   │   │   ├── CreatePreferenceRequestDto.cs
+│   │   │   └── ...
+│   │   ├── Middleware/               # Middleware personalizado
+│   │   │   └── GlobalExceptionMiddleware.cs
+│   │   ├── Program.cs                # Punto de entrada
+│   │   ├── appsettings.json          # Configuración
+│   │   ├── Dockerfile                # Imagen Docker
+│   │   └── CCD.Api.csproj            # Archivo de proyecto
+│   │
+│   ├── CCD.Core/                     # Capa de Dominio
+│   │   ├── Entities/                 # Entidades del dominio (7)
+│   │   │   ├── User.cs                     # Usuario
+│   │   │   ├── Plan.cs                     # Plan (gratuito/intermedio/avanzado)
+│   │   │   ├── DatabaseInstance.cs         # Instancia de BD
+│   │   │   ├── DatabaseConnectionDetails.cs
+│   │   │   ├── Webhook.cs                  # Webhook personalizado
+│   │   │   ├── WebhookEvent.cs             # Evento de webhook
+│   │   │   └── AuditLog.cs                 # Log de auditoría
+│   │   ├── Interfaces/               # Contratos de servicios (6)
+│   │   │   ├── IAuthRepository.cs
+│   │   │   ├── IDatabaseProvisioner.cs
+│   │   │   ├── IEmailService.cs
+│   │   │   ├── IPaymentService.cs
+│   │   │   ├── IWebhookService.cs
+│   │   │   └── IAuditService.cs
+│   │   ├── Dtos/                     # DTOs compartidos
+│   │   └── CCD.Core.csproj
+│   │
+│   └── CCD.Infrastructure/           # Capa de Infraestructura
+│       ├── Data/                     # Entity Framework
+│       │   └── ApplicationDbContext.cs     # DbContext principal
+│       ├── Migrations/               # Migraciones EF Core (15+)
+│       │   ├── 20251118000000_InitialCreate.cs
+│       │   ├── 20251119000000_AddAuditLogs.cs
+│       │   └── ...
+│       ├── Services/                 # Implementaciones de servicios (6)
+│       │   ├── AuthRepository.cs           # Autenticación
+│       │   ├── DatabaseProvisioner.cs      # Provisión de BD
+│       │   ├── SendGridEmailService.cs     # Emails
+│       │   ├── PaymentService.cs           # Mercado Pago
+│       │   ├── WebhookService.cs           # Webhooks
+│       │   └── AuditService.cs             # Auditoría
+│       └── CCD.Infrastructure.csproj
+│
+├── diagrams/                         # Diagramas del proyecto
+│   ├── DiagramaCasosdeuso.png              # Casos de uso
+│   ├── DiagramaClases.png                  # Diagrama de clases
+│   └── Diagramadelfujo.png                 # Diagrama de flujo
+│
+├── .env.example                      # Plantilla de variables de entorno
+├── .env                              # Variables de entorno (no en git)
+├── .gitignore                        # Archivos ignorados por git
+├── docker-compose.yml                # Orquestación Docker
+├── CCD.sln                           # Solución Visual Studio
+└── README.md                         # Este archivo
 ```
 
-#### **3. Endpoint para Ver Historial Completo**
+### Descripción de Capas
 
-Consulta el historial de todos los eventos de un webhook:
+#### **CCD.Api**
+Punto de entrada de la aplicación. Contiene:
+- **Controllers**: Endpoints HTTP organizados por dominio
+- **DTOs**: Objetos de transferencia para requests/responses
+- **Middleware**: Lógica transversal (excepciones, logging)
+- **Program.cs**: Configuración de servicios, JWT, CORS, Swagger
 
+#### **CCD.Core**
+Lógica de negocio pura. No depende de infraestructura:
+- **Entities**: Modelos del dominio con propiedades y validaciones
+- **Interfaces**: Contratos que Infrastructure debe implementar
+- **DTOs**: Objetos compartidos entre capas
+
+#### **CCD.Infrastructure**
+Implementación de persistencia y servicios externos:
+- **Data**: DbContext y configuración de Entity Framework
+- **Migrations**: Historial de cambios en la BD
+- **Services**: Implementación de interfaces de Core
+
+---
+
+## 📊 Base de Datos - Esquema
+
+### Tablas Principales
+
+#### **Users**
+```sql
+CREATE TABLE "Users" (
+    "Id" UUID PRIMARY KEY,
+    "Name" VARCHAR(100) NOT NULL,
+    "LastName" VARCHAR(100) NOT NULL,
+    "UserName" VARCHAR(50) UNIQUE NOT NULL,
+    "Email" VARCHAR(255) UNIQUE NOT NULL,
+    "PasswordHash" BYTEA NOT NULL,
+    "PasswordSalt" BYTEA NOT NULL,
+    "EmailVerified" BOOLEAN DEFAULT FALSE,
+    "EmailVerificationToken" VARCHAR(500),
+    "EmailVerificationTokenExpiry" TIMESTAMP,
+    "PasswordResetToken" VARCHAR(500),
+    "PasswordResetTokenExpiry" TIMESTAMP,
+    "PlanId" INTEGER NOT NULL,
+    FOREIGN KEY ("PlanId") REFERENCES "Plans"("Id")
+);
+```
+
+#### **Plans**
+```sql
+CREATE TABLE "Plans" (
+    "Id" SERIAL PRIMARY KEY,
+    "Name" VARCHAR(50) NOT NULL,
+    "MaxDatabasesPerEngine" INTEGER NOT NULL,
+    "Price" DECIMAL(10, 2) NOT NULL
+);
+
+-- Datos iniciales
+INSERT INTO "Plans" VALUES
+(1, 'Gratuito', 2, 0.00),
+(2, 'Intermedio', 5, 5000.00),
+(3, 'Avanzado', 10, 10000.00);
+```
+
+#### **DatabaseInstances**
+```sql
+CREATE TABLE "DatabaseInstances" (
+    "Id" UUID PRIMARY KEY,
+    "Name" VARCHAR(255) NOT NULL,
+    "Engine" VARCHAR(50) NOT NULL,
+    "UserId" UUID NOT NULL,
+    "Status" VARCHAR(50) NOT NULL,
+    "CreatedAt" TIMESTAMP NOT NULL,
+    "UpdatedAt" TIMESTAMP,
+    "CredentialsViewedAt" TIMESTAMP,
+    "TimeZoneId" VARCHAR(100) NOT NULL,
+    FOREIGN KEY ("UserId") REFERENCES "Users"("Id") ON DELETE CASCADE
+);
+```
+
+#### **DatabaseConnectionDetails**
+```sql
+CREATE TABLE "DatabaseConnectionDetails" (
+    "Id" UUID PRIMARY KEY,
+    "DatabaseInstanceId" UUID NOT NULL UNIQUE,
+    "Host" VARCHAR(255) NOT NULL,
+    "Port" INTEGER NOT NULL,
+    "DatabaseName" VARCHAR(255) NOT NULL,
+    "Username" VARCHAR(255) NOT NULL,
+    "Password" TEXT NOT NULL,
+    "ConnectionString" TEXT NOT NULL,
+    FOREIGN KEY ("DatabaseInstanceId") REFERENCES "DatabaseInstances"("Id") ON DELETE CASCADE
+);
+```
+
+#### **Webhooks**
+```sql
+CREATE TABLE "Webhooks" (
+    "Id" UUID PRIMARY KEY,
+    "UserId" UUID NOT NULL,
+    "Url" TEXT NOT NULL,
+    "Secret" VARCHAR(500) NOT NULL,
+    "Events" TEXT NOT NULL, -- JSON array
+    "IsActive" BOOLEAN DEFAULT TRUE,
+    "CreatedAt" TIMESTAMP NOT NULL,
+    FOREIGN KEY ("UserId") REFERENCES "Users"("Id") ON DELETE CASCADE
+);
+```
+
+#### **WebhookEvents**
+```sql
+CREATE TABLE "WebhookEvents" (
+    "Id" UUID PRIMARY KEY,
+    "WebhookId" UUID NOT NULL,
+    "EventType" VARCHAR(100) NOT NULL,
+    "Payload" TEXT NOT NULL, -- JSON
+    "Status" VARCHAR(50) NOT NULL,
+    "StatusCode" INTEGER,
+    "Attempts" INTEGER DEFAULT 0,
+    "LastAttemptAt" TIMESTAMP,
+    "Error" TEXT,
+    "CreatedAt" TIMESTAMP NOT NULL,
+    FOREIGN KEY ("WebhookId") REFERENCES "Webhooks"("Id") ON DELETE CASCADE
+);
+```
+
+#### **AuditLogs**
+```sql
+CREATE TABLE "AuditLogs" (
+    "Id" UUID PRIMARY KEY,
+    "UserId" UUID NOT NULL,
+    "Action" VARCHAR(100) NOT NULL,
+    "Details" TEXT,
+    "IpAddress" VARCHAR(50),
+    "CreatedAt" TIMESTAMP NOT NULL,
+    FOREIGN KEY ("UserId") REFERENCES "Users"("Id") ON DELETE CASCADE
+);
+```
+
+### Relaciones
+
+```
+Users (1) ─── (N) DatabaseInstances
+Users (1) ─── (N) Webhooks
+Users (1) ─── (N) AuditLogs
+Plans (1) ─── (N) Users
+
+DatabaseInstances (1) ─── (1) DatabaseConnectionDetails
+
+Webhooks (1) ─── (N) WebhookEvents
+```
+
+---
+
+## 🧪 Testing
+
+### Probar con Swagger
+
+1. Abrir `https://service.andromeda.andrescortes.dev/swagger`
+2. Registrar usuario: `POST /api/auth/register`
+3. Verificar email con token recibido: `POST /api/auth/verify-email`
+4. Iniciar sesión: `POST /api/auth/login` (copiar token JWT)
+5. Click en **Authorize** (arriba derecha)
+6. Pegar: `Bearer {tu_token}`
+7. Probar endpoints protegidos
+
+### Probar con cURL
+
+**Registrar usuario:**
 ```bash
-curl -X GET "http://localhost:5063/api/webhooks/{webhookId}/history" \
-  -H "Authorization: Bearer {tu_token_jwt}"
-```
-
-**Response:**
-```json
-{
-  "total": 15,
-  "events": [
-    {
-      "id": "event-1",
-      "eventType": "database.created",
-      "status": "delivered",
-      "statusCode": 200,
-      "attempts": 1,
-      "timestamp": "2025-11-18T12:30:00Z",
-      "response": "OK"
-    },
-    {
-      "id": "event-2",
-      "eventType": "database.deleted",
-      "status": "failed_after_retries",
-      "statusCode": 500,
-      "attempts": 4,
-      "timestamp": "2025-11-18T13:00:00Z",
-      "error": "Connection timeout",
-      "lastRetry": "2025-11-18T13:30:00Z"
-    }
-  ]
-}
-```
-
-#### **4. Probar un Webhook en Consola**
-
-```bash
-# Crear un webhook de prueba
-curl -X POST "http://localhost:5063/api/webhooks" \
-  -H "Authorization: Bearer {tu_token_jwt}" \
+curl -X POST "https://service.andromeda.andrescortes.dev/api/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://webhook.site/tu-uuid-unico",
-    "secret": "mi_secreto_123",
-    "events": ["database.created"],
-    "isActive": true
+    "name": "Test",
+    "lastName": "User",
+    "userName": "testuser",
+    "email": "test@example.com",
+    "password": "SecurePass123!"
   }'
-
-# Probar el webhook
-curl -X POST "http://localhost:5063/api/webhooks/{webhookId}/test" \
-  -H "Authorization: Bearer {tu_token_jwt}"
 ```
 
-#### **5. Sitio Externo para Testing: Webhook.site**
-
-Usa `https://webhook.site` para ver webhooks recibidos en tiempo real:
-
-1. Ve a `https://webhook.site`
-2. Copia tu UUID único
-3. Crea un webhook en tu aplicación apuntando a `https://webhook.site/{tu-uuid}`
-4. Todos los eventos se mostrarán en tiempo real en `webhook.site`
-
-**Ejemplo:**
-```
-URL Webhook: https://webhook.site/a1b2c3d4-e5f6-7g8h-9i0j-k1l2m3n4o5p6
-Secret: super_secreto_123
-```
-
-Ahora cuando se disparen eventos, verás:
-- ✅ Headers enviados
-- ✅ Body del request
-- ✅ Método HTTP
-- ✅ Timestamp exacto
-- ✅ Status code de respuesta
-
-#### **6. Auditoría de Webhooks en Base de Datos**
-
-Los webhooks y sus eventos se guardan en PostgreSQL en las tablas:
-- `Webhooks` - Definición de webhooks
-- `WebhookEvents` - Historial de eventos enviados
-
-Consulta directamente en PgAdmin:
-```sql
--- Ver todos los webhooks de un usuario
-SELECT id, url, events, is_active, created_at 
-FROM "Webhooks" 
-WHERE user_id = 'guid-del-usuario';
-
--- Ver historial de eventos
-SELECT id, webhook_id, event_type, status, status_code, attempts, created_at 
-FROM "WebhookEvents" 
-WHERE webhook_id = 'guid-del-webhook'
-ORDER BY created_at DESC;
-
--- Ver webhooks fallidos
-SELECT id, url, events, attempts, error, last_error_at 
-FROM "WebhookEvents" 
-WHERE status = 'failed'
-ORDER BY last_error_at DESC;
-```
-
-### Testing de Webhooks
-
-**Probar un webhook:**
-```http
-POST /api/webhooks/{webhookId}/test
-Authorization: Bearer {jwt_token}
-```
-
-Envía un payload de prueba para verificar la configuración.
-
----
-
-## 📊 Estado de Integraciones
-
-| Integración | Estado | Documentación |
-|-------------|--------|---------------|
-| SendGrid Email | ✅ Operativo | Completa |
-| Webhooks Personalizados | ✅ Operativo | Completa |
-| Mercado Pago Webhook | ✅ Operativo | Completa |
-| Error Reporting | ✅ Operativo | Completa |
-
----
-
-## 📈 Features Implementados
-
-### Core
-✅ Autenticación JWT completa  
-✅ Gestión de usuarios  
-✅ Creación de BD en 4 motores  
-✅ Validación de cuotas automática  
-✅ Generación segura de credenciales  
-✅ Rotación de credenciales  
-✅ Visualización controlada de credenciales  
-
-### Integraciones
-✅ Mercado Pago  
-✅ SendGrid email  
-✅ Webhooks personalizados  
-✅ Error reporting automático  
-
-### Seguridad
-✅ Global exception handler  
-✅ Logging completo  
-✅ Health checks  
-✅ Middleware de excepciones  
-
----
-
-## 🚀 Despliegue
-
-**Subdominio**: `https://andromeda.andrescortes.dev/api`
-
-### Docker
+**Login:**
 ```bash
-docker-compose -f docker-compose.yml up -d
+curl -X POST "https://service.andromeda.andrescortes.dev/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "SecurePass123!"
+  }'
 ```
 
-### Compilación Release
+**Crear BD (con token):**
 ```bash
-dotnet publish -c Release -o ./publish
+curl -X POST "https://service.andromeda.andrescortes.dev/api/databases" \
+  -H "Authorization: Bearer {tu_token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "engine": "PostgreSQL",
+    "timeZoneId": "America/Bogota"
+  }'
 ```
 
 ---
+
+## 📈 Monitoreo y Logs
+
+### Logs en Producción (Docker)
+
+```bash
+# Ver logs en tiempo real
+docker logs -f ccd_api
+
+# Últimos 100 logs
+docker logs ccd_api --tail 100
+
+# Logs con timestamps
+docker logs -t ccd_api
+
+# Filtrar por palabra clave
+docker logs ccd_api 2>&1 | grep "ERROR"
+```
+
+### Logs en Desarrollo
+
+Los logs se muestran automáticamente en la consola al ejecutar `dotnet run`.
+
+**Niveles de log:**
+- `Information` - Operaciones normales
+- `Warning` - Situaciones inusuales pero manejables
+- `Error` - Errores capturados que no detienen la app
+- `Critical` - Errores graves que requieren atención inmediata
+
+---
+
 
 ## 📚 Documentación Adicional
 
-- `BACKEND_100_PORCIENTO_FINAL.md` - Resumen final del proyecto
-- Swagger UI: Disponible en `/swagger` en desarrollo
-- OpenAPI: Disponible en `/swagger/v1/swagger.json`
+- **Swagger UI**: `https://service.andromeda.andrescortes.dev/swagger`
+- **Diagramas**: Carpeta `/diagrams`
+  - Casos de uso
+  - Diagrama de clases
+  - Diagrama de flujo
+- **Corrección Sistema de Pagos**: `CORRECCION_CAMBIO_PLAN.md`
 
 ---
 
-## ✅ Estado del Proyecto
+## 👥 Equipo
 
-| Aspecto | Status |
+- **Backend Developer**: Andromeda Team
+- **Fecha**: 20 de Noviembre de 2025
+- **Versión**: 1.0.0
+
+---
+
+## 📝 Licencia
+
+Este proyecto es parte de un trabajo académico de la plataforma CrudCloudDb.
+
+---
+
+## 🎯 Estado del Proyecto
+
+| Aspecto | Estado |
 |---------|--------|
-| Completitud | ✅ 100% |
-| Endpoints | ✅ 33/33 |
-| Seguridad | ✅ 100% |
-| Testing | ✅ En Swagger |
-| Producción | ✅ Listo |
+| Backend API | ✅ 100% Completo |
+| Endpoints | ✅ 31 Implementados |
+| Seguridad | ✅ JWT, Hash, CORS, HTTPS |
+| Integraciones | ✅ Mercado Pago, SendGrid |
+| Webhooks Personalizados | ✅ 8 Endpoints disponibles por API |
+| Bases de Datos | ✅ PostgreSQL, MySQL, MongoDB, SQL Server |
+| Auditoría | ✅ Completa |
+| Testing | ✅ Swagger disponible |
+| Producción | ✅ Desplegado |
+| Documentación | ✅ Completa |
 
 ---
 
-## 📞 Soporte
-
-Para reportar bugs o sugerencias, usar los webhooks de error o contactar al equipo de desarrollo.
-
----
-
-**Última actualización**: 14 de Noviembre de 2025  
-**Versión**: 1.0.0  
-**Status**: ✅ Listo para producción
+**Repositorio**: [GitHub - CrudCloudDb-Backend](https://github.com/andromeda-riwi/CrudCloudDb-Backend)
 

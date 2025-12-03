@@ -26,17 +26,20 @@ public class WebhookController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> ReceiveMercadoPagoNotification([FromBody] MercadoPagoNotificationsDto notification)
     {
+        _logger.LogInformation("🔔 ====== WEBHOOK DE MERCADO PAGO RECIBIDO ======");
+        _logger.LogInformation("📋 Notificación: {Notification}", JsonSerializer.Serialize(notification));
+        
         // --- Init of firm validation ---
         if (!Request.Headers.TryGetValue("X-Signature", out StringValues signatureHeader))
         {
-            _logger.LogWarning("Webhook de Mercado Pago recibido sin la cabecera X-Signature.");
+            _logger.LogWarning("⚠️ Webhook de Mercado Pago recibido sin la cabecera X-Signature.");
             return BadRequest("Firma no encontrada.");
         }
 
         var webhookSecret = _configuration["MercadoPago:WebhookSecret"];
         if (string.IsNullOrEmpty(webhookSecret))
         {
-            _logger.LogError("El Webhook Secret de Mercado Pago no está configurado.");
+            _logger.LogError("❌ El Webhook Secret de Mercado Pago no está configurado.");
             return StatusCode(500, "Configuración del servidor incompleta.");
         }
 
@@ -47,11 +50,12 @@ public class WebhookController : ControllerBase
 
         if (string.IsNullOrEmpty(timestamp) || string.IsNullOrEmpty(hash) || notification.Data == null)
         {
+            _logger.LogWarning("⚠️ Formato de firma inválido o datos faltantes");
             return BadRequest("Formato de firma inválido.");
         }
         
         // manifest of the mercado pago payment
-        var manifest = $"id:{notification.Data.Id};request-id:{Request.Headers["X-Request-Id"]};ts:{timestamp};"; //this part should be like do get mercado pago by security
+        var manifest = $"id:{notification.Data.Id};request-id:{Request.Headers["X-Request-Id"]};ts:{timestamp};";
 
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(webhookSecret));
         var computedHashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(manifest));
@@ -59,25 +63,43 @@ public class WebhookController : ControllerBase
 
         if (computedHash != hash)
         {
-            _logger.LogWarning("¡Firma de Webhook inválida! Se recibió una notificación potencialmente fraudulenta.");
+            _logger.LogWarning("🚨 ¡Firma de Webhook inválida! Se recibió una notificación potencialmente fraudulenta.");
+            _logger.LogWarning("Hash recibido: {ReceivedHash}", hash);
+            _logger.LogWarning("Hash calculado: {ComputedHash}", computedHash);
             return Unauthorized("Firma inválida.");
         }
+        
+        _logger.LogInformation("✅ Firma de webhook validada correctamente");
         // -end validation of the FIRM ---
 
-        _logger.LogInformation("Notificación de Mercado Pago recibida y validada: {Body}", JsonSerializer.Serialize(notification));
+        _logger.LogInformation("📄 Notificación validada: Action={Action}, Type={Type}, DataId={DataId}", 
+            notification.Action, notification.Type, notification.Data?.Id);
 
         var topic = notification.Action;
         var paymentIdString = notification.Data?.Id;
 
         if (topic?.StartsWith("payment.") == true && long.TryParse(paymentIdString, out var paymentId))
         {
-            _logger.LogInformation("Procesando notificación para el pago ID: {PaymentId}", paymentId);
-            await _paymentService.ProcessPaymentNotificationAsync(paymentId);
+            _logger.LogInformation("💳 Procesando notificación de pago. Topic: {Topic}, PaymentId: {PaymentId}", topic, paymentId);
+            
+            try
+            {
+                await _paymentService.ProcessPaymentNotificationAsync(paymentId);
+                _logger.LogInformation("✅ Notificación procesada exitosamente para pago {PaymentId}", paymentId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "💥 Error al procesar notificación para pago {PaymentId}", paymentId);
+                return StatusCode(500, "Error procesando webhook");
+            }
         }
         else
         {
-            _logger.LogWarning("Notificación no reconocida o sin ID de pago válido.");
+            _logger.LogWarning("⚠️ Notificación no reconocida o sin ID de pago válido. Topic: {Topic}, DataId: {DataId}", 
+                topic, paymentIdString);
         }
+        
+        _logger.LogInformation("🏁 Webhook procesado. Retornando OK a Mercado Pago.");
         return Ok();
     }
 }
